@@ -4,6 +4,17 @@ A neutral place where a buyer's AI and a seller's AI agree on a deal. Every offe
 
 This repository is the working prototype behind the Tribunal pitch. Everything here runs on **sample data**: no real users, payments or disputes yet.
 
+
+## Try it
+
+- [Clickable negotiation demo](https://hemanthdadi1.github.io/agent-deal-layer/demo.html)
+- [Live market simulation](https://hemanthdadi1.github.io/agent-deal-layer/simulation.html)
+
+These links work once GitHub Pages is on (Settings > Pages > branch `main`, folder `/docs`). Until then, download the files and open them in a browser:
+[docs/demo.html](docs/demo.html) and [docs/simulation.html](docs/simulation.html).
+
+Rebuild with `python web/build.py`, then copy `web/dist/*.html` into `docs/`.
+
 ## What's inside
 
 | Folder | What it is |
@@ -48,7 +59,3 @@ To connect the MCP server to Claude Desktop or ChatGPT, see [`poc/README.md`](po
 - The engine still concedes all the way to each limit by the last round. Tribunal's stop-short margin and blind mediator should be ported in.
 - No licence has been chosen yet.
 
-
-## Live pages
-
-The built pages are in `docs/` (`demo.html`, `simulation.html`). Open them directly in a browser, or enable GitHub Pages (Settings > Pages > main branch, /docs folder) to get a public link. Rebuild with `python web/build.py`, then copy `web/dist/*.html` into `docs/`.
