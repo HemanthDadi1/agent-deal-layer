@@ -47,3 +47,8 @@ To connect the MCP server to Claude Desktop or ChatGPT, see [`poc/README.md`](po
 - Deal records use an HMAC signature; production needs per-party Ed25519 keys.
 - The engine still concedes all the way to each limit by the last round. Tribunal's stop-short margin and blind mediator should be ported in.
 - No licence has been chosen yet.
+
+
+## Live pages
+
+The built pages are in `docs/` (`demo.html`, `simulation.html`). Open them directly in a browser, or enable GitHub Pages (Settings > Pages > main branch, /docs folder) to get a public link. Rebuild with `python web/build.py`, then copy `web/dist/*.html` into `docs/`.

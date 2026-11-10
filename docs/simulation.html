@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Deal Market Simulation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a market control room. Controls + clock on top, KPIs, then three live columns
+   (buyers arriving · negotiations in progress · seller board), then money flow and the two charts. */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --soft:#edf0f5; --ink:#131821; --muted:#5a6374; --line:#dce1e9;
+  --buyer:#2453c7; --seller:#ad5f0f; --good:#1d7a4c; --bad:#b42318; --warn:#946200;
+  --a1:#2453c7; --a2:#7c3aed; --a3:#0e7490; --a4:#b45309; --a5:#be185d; --a6:#4b5563;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d1016; --surface:#151922; --soft:#1b2029; --ink:#e5e8ee; --muted:#98a1b2; --line:#283040;
+  --buyer:#7ea3ff; --seller:#f0a45c; --good:#4cc38a; --bad:#ff7b6f; --warn:#e2b340;
+  --a1:#7ea3ff; --a2:#b794f6; --a3:#4fd1e3; --a4:#f6ad55; --a5:#f687b3; --a6:#a0aec0; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0d1016; --surface:#151922; --soft:#1b2029; --ink:#e5e8ee; --muted:#98a1b2; --line:#283040;
+  --buyer:#7ea3ff; --seller:#f0a45c; --good:#4cc38a; --bad:#ff7b6f; --warn:#e2b340;
+  --a1:#7ea3ff; --a2:#b794f6; --a3:#4fd1e3; --a4:#f6ad55; --a5:#f687b3; --a6:#a0aec0; color-scheme:dark;}
+
+*{box-sizing:border-box} [hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--body)}
+.wrap{max-width:1320px;margin:0 auto;padding:0 18px}
+h1,h2,h3{font-family:var(--display);font-weight:600;line-height:1.15;margin:0;text-wrap:balance}
+h1{font-size:26px} h3{font-size:15px}
+p{margin:0}
+.muted{color:var(--muted)} .small{font-size:12.5px}
+.mono,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+header{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+@media (max-width:900px){header{position:static}}
+.top{display:flex;flex-wrap:wrap;gap:10px 24px;justify-content:space-between;align-items:center;padding:12px 0}
+.brand{display:flex;flex-direction:column;gap:2px;max-width:560px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.clock{font:500 18px var(--mono);min-width:150px}
+.clock small{display:block;font:12px var(--body);color:var(--muted)}
+button{font:500 13.5px var(--body);border-radius:7px;padding:7px 12px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+button.primary{background:var(--buyer);border-color:var(--buyer);color:#fff;min-width:84px}
+:root[data-theme="dark"] button.primary{color:#0d1016}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) button.primary{color:#0d1016}}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:7px 10px;font-family:var(--mono)}
+.seg button[aria-pressed="true"]{background:var(--soft);color:var(--buyer)}
+label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted);min-width:150px}
+label .lv{display:flex;justify-content:space-between} label output{font-family:var(--mono);color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--buyer)}
+input[type=number],select{font:13px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 7px}
+.check{flex-direction:row;align-items:center;gap:6px;color:var(--ink);font-size:13px;min-width:0}
+:focus-visible{outline:2px solid var(--buyer);outline-offset:2px}
+
+main{padding:16px 0 40px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
+.pill{display:inline-flex;align-items:center;gap:5px;font:500 11.5px var(--mono);padding:2px 7px;border-radius:99px;border:1px solid var(--line);color:var(--muted);background:var(--soft);white-space:nowrap}
+.pill.g{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,var(--line))}
+.pill.r{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
+.pill.w{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+.pill.b{color:var(--buyer);border-color:color-mix(in srgb,var(--buyer) 40%,var(--line))}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+
+.kpis{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(4,1fr)}}
+@media (max-width:600px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:1px}
+.kpi .num{font-size:21px;font-weight:500}
+.kpi.key{border-color:var(--buyer)}
+
+.live{display:grid;grid-template-columns:300px 1fr 340px;gap:14px;align-items:start}
+@media (max-width:1150px){.live{grid-template-columns:1fr 1fr}.live>.negs{grid-column:1/-1;order:-1}}
+@media (max-width:700px){.live{grid-template-columns:1fr}}
+.list{display:flex;flex-direction:column;gap:6px;max-height:520px;overflow:auto}
+.bitem{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:12.5px}
+.bitem .t{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.negs .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media (max-width:700px){.negs .grid{grid-template-columns:1fr}}
+.neg{border:1px solid var(--line);border-radius:9px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.neg.approved{border-color:var(--good)} .neg.declined,.neg.soldout{border-color:color-mix(in srgb,var(--bad) 50%,var(--line))}
+.neg .who{display:flex;justify-content:space-between;gap:6px;font-size:12.5px}
+.neg .who b{font-weight:600}
+.neg .row{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:12px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{font-weight:500;color:var(--muted);text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:6px 6px;border-bottom:1px solid var(--line)}
+td{padding:7px 6px;border-bottom:1px solid var(--line)}
+td.num,th.num{text-align:right}
+.trust{height:5px;background:var(--soft);border-radius:3px;overflow:hidden;margin-top:3px}
+.trust i{display:block;height:100%;background:var(--good)}
+
+.flow{display:grid;grid-template-columns:1.1fr 1fr;gap:14px;align-items:start}
+@media (max-width:1000px){.flow{grid-template-columns:1fr}}
+.pipe{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+@media (max-width:640px){.pipe{grid-template-columns:repeat(3,1fr)}}
+.stage{border:1px solid var(--line);border-radius:8px;padding:9px;display:flex;flex-direction:column;gap:2px}
+.stage .num{font-size:20px;font-weight:500}
+.stage .bar{height:4px;border-radius:2px;background:var(--soft);overflow:hidden}.stage .bar i{display:block;height:100%}
+.feed{display:flex;flex-direction:column;gap:2px;max-height:300px;overflow:auto;font-size:12.5px}
+.ev{display:grid;grid-template-columns:72px 10px 1fr;gap:8px;align-items:baseline;padding:4px 2px;border-bottom:1px dashed var(--line)}
+.ev .t{font:11px var(--mono);color:var(--muted)}
+.charts{display:grid;grid-template-columns:1.25fr 1fr;gap:14px}
+@media (max-width:1000px){.charts{grid-template-columns:1fr}}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted)}
+svg text{font-family:var(--mono)}
+.note{font-size:12.5px;color:var(--muted)}
+footer{color:var(--muted);font-size:12.5px;padding:0 0 30px}
+@media (prefers-reduced-motion:no-preference){.flash{animation:flash .6s ease-out}@keyframes flash{from{background:color-mix(in srgb,var(--good) 18%,var(--surface))}to{background:transparent}}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap top">
+    <div class="brand">
+      <div style="display:flex;gap:10px;align-items:center"><h1>Agent Deal Market</h1><span class="pill">live simulation · sample data</span></div>
+      <p class="muted small">Buyer agents from different AI assistants arrive, the shared engine negotiates with every matching seller, and money moves through escrow. Every closed price teaches the price guidance.</p>
+    </div>
+    <div class="controls">
+      <div class="clock" id="clock">Day 1 · 00:00<small>simulated time</small></div>
+      <button class="primary" id="play">Pause</button>
+      <button id="step" title="Advance one simulated hour">+1 hour</button>
+      <div class="seg" role="group" aria-label="Speed">
+        <button data-speed="1">1×</button><button data-speed="4" aria-pressed="true">4×</button><button data-speed="12">12×</button><button data-speed="40">40×</button>
+      </div>
+      <label for="rate"><span class="lv">Buyers per day <output id="o-rate"></output></span><input type="range" id="rate" min="10" max="120" step="2" value="48"></label>
+      <label for="risk"><span class="lv">Defect risk <output id="o-risk"></output></span><input type="range" id="risk" min="0" max="3" step="0.25" value="1"></label>
+      <label class="check" for="market"><input type="checkbox" id="market" checked> Cap at market walk-away</label>
+      <label for="seed" style="min-width:90px">Seed<input type="number" id="seed" value="7" min="1" max="9999"></label>
+      <label for="days" style="min-width:110px">Run for<select id="days"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option><option value="0">No limit</option></select></label>
+      <button id="reset">Restart</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card" id="summary" hidden style="border-color:var(--good)"></section>
+  <section class="kpis" id="kpis" aria-label="Market totals"></section>
+
+  <section class="live">
+    <div class="card">
+      <div class="head"><h3>Buyers arriving</h3><span class="small muted">private mandates</span></div>
+      <div class="list" id="buyers"></div>
+    </div>
+    <div class="card negs">
+      <div class="head"><h3>Negotiations in progress</h3>
+        <div class="legend"><span><i class="dot" style="background:var(--seller)"></i> seller asks</span><span><i class="dot" style="background:var(--buyer)"></i> buyer bids</span><span><i class="dot" style="background:var(--good)"></i> deal</span></div></div>
+      <div class="grid" id="negs"></div>
+    </div>
+    <div class="card">
+      <div class="head"><h3>Seller board</h3><span class="small muted">floors stay private</span></div>
+      <div style="overflow-x:auto"><table id="sellers"></table></div>
+    </div>
+  </section>
+
+  <section class="flow">
+    <div class="card">
+      <div class="head"><h3>Money in escrow</h3><span class="small muted">paid out only after inspection or a ruling</span></div>
+      <div class="pipe" id="pipe"></div>
+      <p class="note" style="margin-top:10px" id="pipenote"></p>
+    </div>
+    <div class="card">
+      <div class="head"><h3>Market events</h3><span class="small muted" id="evcount"></span></div>
+      <div class="feed" id="feed" aria-live="off"></div>
+    </div>
+  </section>
+
+  <section class="charts">
+    <div class="card">
+      <div class="head"><h3 id="pc-title">Price discovery</h3>
+        <select id="pc-product" aria-label="Product for the price chart">
+          <option value="macbook-air-m2-16gb">MacBook Air M2 (16GB)</option>
+          <option value="dell-xps-13-16gb">Dell XPS 13 (16GB)</option>
+          <option value="monitor-27-4k">27-inch 4K monitor</option>
+        </select></div>
+      <div id="pc"></div>
+      <div class="legend" id="pc-legend"></div>
+    </div>
+    <div class="card">
+      <div class="head"><h3>What each assistant's users would overpay alone</h3></div>
+      <div id="fc"></div>
+      <p class="note">For every closed deal, the simulation also replays the same buyer against the same listing with the assistant bargaining on its own (weaker models open higher and concede faster). With the shared engine, the assistant has no effect on the price.</p>
+    </div>
+  </section>
+</main>
+<footer class="wrap">Sample data: 8 simulated sellers, 3 products, assistant skill levels and defect rates are assumptions. The negotiation engine, hard caps and dispute rules are the same code as the Agent Deal Layer MCP server.</footer>
+
+<script>
+// ---- Agent Deal Layer engine (port of agentdeal/engine.py + ledger rules) ----
+const ROUNDS = 10;
+const COND = { A: 3, B: 2, C: 1 };
+const HUMAN_REVIEW_ABOVE = 200, INSPECTION_DAYS = 3;
+
+const SEED = {
+  products: {
+    "macbook-air-m2-16gb": { title: "MacBook Air M2 (16GB)", launch: 1399,
+      comps: [640, 655, 662, 670, 678, 685, 690, 702, 710, 720],
+      checklist: ["Battery cycle count and health %", "Activation Lock / Find My is off",
+        "Keyboard, trackpad and screen: no dead keys or pixels", "Original charger included",
+        "Serial number matches and is not reported stolen"] },
+    "dell-xps-13-16gb": { title: "Dell XPS 13 (16GB)", launch: 1299,
+      comps: [480, 495, 505, 515, 520, 530, 545, 560],
+      checklist: ["Battery health in Dell Power Manager", "BIOS password removed",
+        "Windows license activated", "Hinge and screen condition"] },
+    "monitor-27-4k": { title: "27-inch 4K monitor", launch: 399,
+      comps: [205, 212, 219, 225, 229, 234, 240, 249],
+      checklist: ["Dead or stuck pixels", "Backlight bleed in a dark room", "Stand and cables included"] },
+  },
+  sellers: {
+    S1: { name: "Marcus Refurb Co.", toughness: 0.6, verified: true },
+    S2: { name: "BayTech Resale", toughness: 0.4, verified: true },
+    S3: { name: "Campus Gadgets", toughness: 0.7, verified: true },
+    S4: { name: "QuickFlip Electronics", toughness: 0.5, verified: false },
+  },
+  listings: [
+    { id: "L1", seller: "S1", product: "macbook-air-m2-16gb", list: 749, floor: 655,
+      specs: { ram_gb: 16, storage_gb: 512, battery_health: 88, condition: "A" },
+      warranty: [{ days: 0, cpd: 0 }, { days: 30, cpd: 0.35 }, { days: 90, cpd: 0.3 }],
+      delivery: [{ days: 5, cost: 0 }, { days: 2, cost: 15 }] },
+    { id: "L2", seller: "S2", product: "macbook-air-m2-16gb", list: 729, floor: 660,
+      specs: { ram_gb: 16, storage_gb: 256, battery_health: 91, condition: "A" },
+      warranty: [{ days: 0, cpd: 0 }], delivery: [{ days: 3, cost: 0 }] },
+    { id: "L3", seller: "S3", product: "macbook-air-m2-16gb", list: 799, floor: 690,
+      specs: { ram_gb: 16, storage_gb: 512, battery_health: 95, condition: "A" },
+      warranty: [{ days: 0, cpd: 0 }, { days: 60, cpd: 0.25 }],
+      delivery: [{ days: 4, cost: 0 }, { days: 1, cost: 25 }] },
+    { id: "L4", seller: "S4", product: "macbook-air-m2-16gb", list: 690, floor: 610,
+      specs: { ram_gb: 16, storage_gb: 256, battery_health: 82, condition: "B" },
+      warranty: [{ days: 0, cpd: 0 }], delivery: [{ days: 6, cost: 0 }] },
+    { id: "L5", seller: "S1", product: "macbook-air-m2-16gb", list: 769, floor: 700,
+      specs: { ram_gb: 16, storage_gb: 1024, battery_health: 90, condition: "A" },
+      warranty: [{ days: 0, cpd: 0 }, { days: 30, cpd: 0.35 }], delivery: [{ days: 7, cost: 0 }] },
+    { id: "L6", seller: "S2", product: "dell-xps-13-16gb", list: 579, floor: 505,
+      specs: { ram_gb: 16, storage_gb: 512, battery_health: 86, condition: "A" },
+      warranty: [{ days: 0, cpd: 0 }, { days: 30, cpd: 0.3 }], delivery: [{ days: 3, cost: 0 }] },
+    { id: "L7", seller: "S1", product: "monitor-27-4k", list: 259, floor: 214,
+      specs: { condition: "A" },
+      warranty: [{ days: 0, cpd: 0 }, { days: 90, cpd: 0.08 }], delivery: [{ days: 5, cost: 0 }] },
+  ],
+};
+
+// Python's round(): half to even, so prices match the Python POC exactly.
+function pyRound(x) {
+  const f = Math.floor(x), d = x - f;
+  if (Math.abs(d - 0.5) < 1e-9) return f % 2 === 0 ? f : f + 1;
+  return Math.round(x);
+}
+const r2 = x => Math.round(x * 100) / 100;
+
+function pct(s, p) {
+  const k = (s.length - 1) * p, lo = Math.floor(k), hi = Math.ceil(k);
+  return s[lo] + (s[hi] - s[lo]) * (k - lo);
+}
+function median(s) {
+  const n = s.length;
+  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+}
+
+function guidance(productKey) {
+  const p = SEED.products[productKey];
+  const s = [...p.comps].sort((a, b) => a - b);
+  const p25 = pct(s, 0.25), mid = median(s), p75 = pct(s, 0.75);
+  return { title: p.title, launch: p.launch, deals: s.length, comps: s,
+    fair: [pyRound(p25), pyRound(p75)], median: pyRound(mid),
+    opening: pyRound(p25 - 0.5 * (mid - p25)), walk: pyRound(p75 + 0.5 * (p75 - p25)),
+    checklist: p.checklist };
+}
+
+function matches(m, l) {
+  if (l.product !== m.product) return [false, "different product"];
+  for (const [k, v] of Object.entries(m.minSpecs || {}))
+    if ((l.specs[k] || 0) < v) return [false, `${k.replace("_", " ")} below requirement`];
+  if ((COND[l.specs.condition || "C"] || 0) < (COND[m.minCondition || "C"] || 0))
+    return [false, "condition below requirement"];
+  if (!l.delivery.some(d => d.days <= m.deadline)) return [false, "cannot deliver by the deadline"];
+  return [true, ""];
+}
+
+const exponent = t => 0.3 + 1.7 * (1 - Math.min(Math.max(t, 0), 1));
+const fraction = (k, t) => Math.pow(k / ROUNDS, 1 / exponent(t));
+
+function negotiatePackage(m, l, opening, w, d, walk) {
+  const sellerT = SEED.sellers[l.seller] ? SEED.sellers[l.seller].toughness : (l.toughness ?? 0.5);
+  const sellerReserve = l.floor + w.days * w.cpd + d.cost;
+  let buyerReserve = m.maxPrice;
+  if (walk != null) buyerReserve = Math.min(buyerReserve, walk + 0.5 * w.days * m.warrantyValue);
+  const base = { listing: l.id, seller: l.seller, warranty: w.days, delivery: d.days,
+    sellerReserve, buyerReserve };
+  if (sellerReserve > buyerReserve)
+    return { ...base, agreed: false, price: null, rounds: [], reason: "no overlap between the two sides' limits" };
+  const ask0 = Math.max(l.list + w.days * w.cpd + d.cost, sellerReserve);
+  const bid0 = Math.min(opening, buyerReserve);
+  const rounds = [];
+  for (let k = 0; k <= ROUNDS; k++) {
+    const ask = ask0 - (ask0 - sellerReserve) * fraction(k, sellerT);
+    const bid = bid0 + (buyerReserve - bid0) * fraction(k, m.toughness);
+    rounds.push({ k, ask: r2(ask), bid: r2(bid) });
+    if (bid >= ask) {
+      let price = (ask + bid) / 2;
+      if (Math.ceil(sellerReserve) <= Math.floor(buyerReserve))
+        price = Math.min(Math.max(pyRound(price), Math.ceil(sellerReserve)), Math.floor(buyerReserve));
+      else price = r2(Math.min(Math.max(price, sellerReserve), buyerReserve));
+      return { ...base, agreed: true, price, rounds, utility: r2(w.days * m.warrantyValue - price) };
+    }
+  }
+  return { ...base, agreed: false, price: null, rounds, reason: "no agreement within 10 rounds" };
+}
+
+function negotiateListing(m, l, opening, walk) {
+  let best = null;
+  for (const w of l.warranty) for (const d of l.delivery) {
+    if (d.days > m.deadline) continue;
+    const o = negotiatePackage(m, l, opening, w, d, walk);
+    if (!o.agreed) { if (!best) best = o; continue; }
+    if (!best || !best.agreed || o.utility > best.utility ||
+        (o.utility === best.utility && (o.price < best.price ||
+          (o.price === best.price && o.delivery < best.delivery)))) best = o;
+  }
+  return best;
+}
+
+function runNegotiation(m, listings = SEED.listings) {
+  const g = guidance(m.product);
+  const walk = m.respectMarket ? g.walk : null;
+  const considered = [], skipped = [];
+  for (const l of [...listings].sort((a, b) => a.id.localeCompare(b.id))) {
+    const [ok, why] = matches(m, l);
+    if (!ok) { if (l.product === m.product) skipped.push({ listing: l.id, reason: why }); continue; }
+    considered.push(negotiateListing(m, l, g.opening, walk));
+  }
+  const best = considered.filter(o => o.agreed)
+    .sort((a, b) => b.utility - a.utility || a.price - b.price || a.listing.localeCompare(b.listing));
+  return { guidance: g, considered, best: best.slice(0, 3), skipped,
+    noDeal: considered.filter(o => !o.agreed) };
+}
+
+// ---- dispute panel (port of ledger.review_dispute) ----
+function ruleFor(claim, terms, ev) {
+  const price = terms.price;
+  if (claim === "arrived_dead") return { outcome: "full_refund_on_return", refund: price };
+  if (claim === "battery_below_promised") {
+    const promised = terms.specs.battery_health, measured = ev.measured_battery_health;
+    if (promised == null || measured == null) return { outcome: "need_more_evidence", refund: 0 };
+    const gap = promised - measured;
+    if (gap <= 2) return { outcome: "reject_claim", refund: 0 };
+    return { outcome: "partial_refund", refund: Math.min(price, 5 * gap) };
+  }
+  if (claim === "not_as_described") return { outcome: "human_judgement", refund: 0 };
+  return { outcome: "unknown_claim", refund: 0 };
+}
+
+function reviewDispute(terms, claim, ev, days, recordOk, presentedMatches) {
+  const integrity = !recordOk
+    ? { reviewer: "Integrity", vote: "escalate", why: "stored record failed verification" }
+    : !presentedMatches
+      ? { reviewer: "Integrity", vote: "reject_claim", why: "record shown by the claimant does not match the signed record" }
+      : { reviewer: "Integrity", vote: "ok", why: "signed record verified" };
+  const rr = ruleFor(claim, terms, ev);
+  const rules = { reviewer: "Rules", vote: rr.outcome, refund: rr.refund, why: "applied the fixed rule table" };
+  let evidence;
+  if (days > INSPECTION_DAYS) evidence = { reviewer: "Evidence", vote: "reject_claim", why: "opened after the 3-day inspection window" };
+  else if (!Object.keys(ev).length) evidence = { reviewer: "Evidence", vote: "need_more_evidence", why: "no evidence attached" };
+  else evidence = { reviewer: "Evidence", vote: rr.outcome, refund: rr.refund, why: "evidence present and inside the inspection window" };
+  const votes = [integrity, rules, evidence];
+  let outcome, refund, unanimous;
+  if (integrity.vote !== "ok") { outcome = integrity.vote; refund = 0; unanimous = true; }
+  else {
+    outcome = rules.vote; refund = rules.refund || 0; unanimous = rules.vote === evidence.vote;
+    if (!unanimous && ["reject_claim", "need_more_evidence"].includes(evidence.vote)) { outcome = evidence.vote; refund = 0; }
+  }
+  const needsHuman = !unanimous || terms.price > HUMAN_REVIEW_ABOVE || ["human_judgement", "escalate"].includes(outcome);
+  return { votes, outcome, refund, needsHuman };
+}
+
+
+// ---- Market simulation built on the engine (engine.js must be loaded first) ----
+const TICKS_PER_DAY = 144;            // 1 tick = 10 simulated minutes
+const FEE_RATE = 0.035, PROTECTION_FEE = 5;
+
+const ASSISTANTS = [
+  { key: "chatgpt", name: "ChatGPT", size: "large model", skill: 0.8 },
+  { key: "claude", name: "Claude", size: "large model", skill: 0.8 },
+  { key: "gemini", name: "Gemini", size: "large model", skill: 0.75 },
+  { key: "grok", name: "Grok", size: "mid-size model", skill: 0.6 },
+  { key: "deepseek", name: "DeepSeek", size: "mid-size model", skill: 0.55 },
+  { key: "small", name: "Small open model", size: "small model", skill: 0.2 },
+];
+const SELLER_NAMES = ["Marcus Refurb Co.", "BayTech Resale", "Campus Gadgets", "QuickFlip Electronics",
+  "Northside Computers", "ReBoot Labs", "Pixel & Port", "Second Byte"];
+const PRODUCT_MIX = [["macbook-air-m2-16gb", 0.55], ["dell-xps-13-16gb", 0.25], ["monitor-27-4k", 0.2]];
+const BASE_COMPS = Object.fromEntries(Object.entries(SEED.products).map(([k, p]) => [k, [...p.comps]]));
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function createSim(opts = {}) {
+  const S = {
+    seed: opts.seed ?? 7, t: 0, rate: opts.rate ?? 48, risk: opts.risk ?? 1, respectMarket: opts.respectMarket ?? true,
+    sellers: [], listings: [], buyers: [], deals: [], events: [], prices: [], bands: {},
+    fair: Object.fromEntries(ASSISTANTS.map(a => [a.key, { n: 0, eng: 0, alone: 0, engRatio: 0, aloneRatio: 0, noDealAlone: 0 }])),
+    k: { arrived: 0, matched: 0, noMatch: 0, approved: 0, declined: 0, soldOut: 0, gmv: 0, revenue: 0, saved: 0,
+         delivered: 0, released: 0, disputes: 0, rejected: 0, refunds: 0, refundSum: 0, capViolations: 0 },
+    nid: { buyer: 0, listing: 0, deal: 0 },
+  };
+  const rnd = mulberry32(S.seed);
+  const U = (a, b) => a + (b - a) * rnd();
+  const RI = (a, b) => Math.floor(U(a, b + 1));
+  const pick = arr => arr[Math.floor(rnd() * arr.length)];
+  const wpick = pairs => { let x = rnd(), acc = 0; for (const [v, w] of pairs) { acc += w; if (x <= acc) return v; } return pairs.at(-1)[0]; };
+  S.rnd = rnd;
+
+  for (const [k, c] of Object.entries(BASE_COMPS)) SEED.products[k].comps = [...c];
+  // "true" market value per product drifts slowly; sellers and buyers price from it,
+  // while the price guidance has to learn it from closed deals.
+  S.value = Object.fromEntries(Object.entries(BASE_COMPS).map(([k, c]) => [k, guidance(k).median]));
+
+  function log(kind, text, extra = {}) {
+    S.events.unshift({ t: S.t, kind, text, ...extra });
+    if (S.events.length > 80) S.events.length = 80;
+  }
+
+  // ---------------------------------------------------------- sellers & listings
+  function makeListing(seller, product) {
+    const v = S.value[product], laptop = product !== "monitor-27-4k";
+    const battery = laptop ? RI(80, 96) : undefined;
+    const warranty = [{ days: 0, cpd: 0 }];
+    if (rnd() < 0.6) warranty.push(rnd() < 0.5 ? { days: 30, cpd: +U(0.2, 0.4).toFixed(2) } : { days: 90, cpd: +U(0.15, 0.3).toFixed(2) });
+    const delivery = [{ days: RI(2, 6), cost: 0 }];
+    if (rnd() < 0.4) delivery.push({ days: RI(1, 2), cost: RI(12, 25) });
+    const l = {
+      id: "L" + (++S.nid.listing), seller: seller.id, toughness: seller.toughness, product,
+      list: Math.round(v * U(1.03, 1.15)), floor: Math.round(v * U(0.9, 0.99)),
+      specs: laptop ? { ram_gb: 16, battery_health: battery, condition: battery >= 85 ? "A" : "B" } : { condition: "A" },
+      warranty, delivery, stock: RI(2, 4), sold: 0,
+    };
+    S.listings.push(l);
+    return l;
+  }
+  SELLER_NAMES.forEach((name, i) => {
+    const s = { id: "M" + (i + 1), name, verified: i !== 3 && i !== 6, toughness: +U(0.35, 0.75).toFixed(2),
+      sales: 0, revenue: 0, margin: 0, disputes: 0, refunds: 0, released: 0 };
+    S.sellers.push(s);
+    const n = RI(2, 3);
+    for (let j = 0; j < n; j++) makeListing(s, wpick(PRODUCT_MIX));
+  });
+  const sellerOf = id => S.sellers.find(s => s.id === id);
+  const stockOf = s => S.listings.filter(l => l.seller === s.id).reduce((a, l) => a + l.stock, 0);
+
+  function snapshotBands() {
+    for (const [k] of PRODUCT_MIX) {
+      const g = guidance(k);
+      (S.bands[k] ||= []).push({ t: S.t, lo: g.fair[0], hi: g.fair[1], med: g.median });
+      if (S.bands[k].length > 400) S.bands[k].shift();
+    }
+  }
+  snapshotBands();
+
+  // ---------------------------------------------------------- buyers
+  function arrive() {
+    const asst = pick(ASSISTANTS), product = wpick(PRODUCT_MIX), g = guidance(product);
+    const laptop = product !== "monitor-27-4k";
+    const batt = laptop ? wpick([[85, 0.5], [80, 0.25], [0, 0.25]]) : 0;
+    const m = { product, maxPrice: Math.round(S.value[product] * U(0.9, 1.12)), deadline: RI(2, 8),
+      warrantyValue: rnd() < 0.5 ? 0 : +U(0.3, 1.5).toFixed(2),
+      minSpecs: laptop ? { ram_gb: 16, ...(batt ? { battery_health: batt } : {}) } : {},
+      toughness: +U(0.3, 0.7).toFixed(2), respectMarket: S.respectMarket };
+    const b = { id: ++S.nid.buyer, asst, product, m, t0: S.t, state: "negotiating", round: 0, guidance: g };
+    S.k.arrived++;
+    const live = S.listings.filter(l => l.product === product && l.stock > 0);
+    const r = runNegotiation(m, live);
+    b.contacted = r.considered.length; b.skipped = r.skipped.length;
+    if (!r.best.length) {
+      b.state = "nodeal"; b.done = S.t; S.k.noMatch++;
+      b.reason = !live.length ? "no stock for this product" : r.considered.length ? "budget below every seller's limit" : "no listing meets the specs or deadline";
+      log("nodeal", `Buyer #${b.id} (${asst.name}) found no deal: ${b.reason}`);
+    } else {
+      b.neg = r.best[0]; b.listing = S.listings.find(l => l.id === b.neg.listing);
+      S.k.matched++;
+      log("arrive", `Buyer #${b.id} (${asst.name}) negotiating with ${b.contacted} seller${b.contacted === 1 ? "" : "s"} for ${SEED.products[product].title}`);
+    }
+    S.buyers.unshift(b);
+  }
+
+  // what this buyer's assistant would get bargaining alone with the same listing and package
+  function shadowAlone(b) {
+    const g = b.guidance, l = b.listing, o = b.neg, s = b.asst.skill;
+    const w = l.warranty.find(x => x.days === o.warranty), d = l.delivery.find(x => x.days === o.delivery);
+    const opening = Math.round(g.opening + (1 - s) * (g.walk - g.opening));
+    const alone = negotiatePackage({ ...b.m, respectMarket: false, toughness: 0.1 + 0.75 * s }, l, opening, w, d, null);
+    return alone.agreed ? alone.price : null;
+  }
+
+  function approve(b) {
+    const l = b.listing, o = b.neg;
+    if (l.stock <= 0) {
+      b.state = "soldout"; b.done = S.t; S.k.soldOut++;
+      log("nodeal", `Buyer #${b.id}: ${l.id} sold out before approval`); return;
+    }
+    // hard-cap invariants (should never fire)
+    const w = l.warranty.find(x => x.days === o.warranty), d = l.delivery.find(x => x.days === o.delivery);
+    const sellerLimit = l.floor + o.warranty * w.cpd + d.cost;
+    if (o.price > b.m.maxPrice + 1e-9 || o.price < sellerLimit - 1e-9) S.k.capViolations++;
+
+    l.stock--; l.sold++;
+    const seller = sellerOf(l.seller), price = o.price;
+    const deal = { id: ++S.nid.deal, buyer: b, listing: l, seller, price, costs: o.warranty * w.cpd + d.cost,
+      terms: { product: l.product, price, warranty_days: o.warranty, delivery_days: o.delivery, specs: l.specs },
+      stage: "funded", t0: S.t, deliverAt: S.t + o.delivery * TICKS_PER_DAY };
+    S.deals.push(deal);
+    b.state = "approved"; b.done = S.t; b.deal = deal;
+    S.k.approved++; S.k.gmv += price; S.k.revenue += FEE_RATE * price + PROTECTION_FEE; S.k.saved += Math.max(0, l.list - price);
+    seller.sales++; seller.revenue += price; seller.margin += price - l.floor - deal.costs;
+    const comps = SEED.products[l.product].comps; comps.push(price); if (comps.length > 30) comps.shift();
+    S.prices.push({ t: S.t, product: l.product, price, asst: b.asst.key });
+    if (S.prices.length > 1500) S.prices.shift();
+    const alone = shadowAlone(b), med = b.guidance.median, f = S.fair[b.asst.key];
+    if (alone == null) f.noDealAlone++;
+    else { f.n++; f.eng += price; f.alone += alone; f.engRatio += price / med; f.aloneRatio += alone / med; }
+    deal.alone = alone;
+    log("deal", `Deal #${deal.id}: Buyer #${b.id} (${b.asst.name}) buys from ${seller.name} at $${price}${o.warranty ? ` with ${o.warranty}-day warranty` : ""}; $${price} held in escrow`, { price });
+  }
+
+  // ---------------------------------------------------------- escrow & disputes
+  function defectProb(seller) { return (seller.verified ? 0.03 : 0.12) * S.risk; }
+
+  function progressDeal(d) {
+    if (d.stage === "funded" && S.t >= d.deliverAt) {
+      d.stage = "inspecting"; S.k.delivered++;
+      const bad = S.rnd() < defectProb(d.seller), falseClaim = !bad && S.rnd() < 0.01 * S.risk;
+      if (bad || falseClaim) { d.disputeAt = S.t + RI(6, 2 * TICKS_PER_DAY); d.defect = bad; }
+      else d.releaseAt = S.t + RI(12, 3 * TICKS_PER_DAY);
+    } else if (d.stage === "inspecting" && d.releaseAt && S.t >= d.releaseAt) {
+      d.stage = "released"; S.k.released++; d.seller.released += d.price;
+      if (S.rnd() < 0.25) log("release", `Deal #${d.id}: buyer confirmed, $${d.price} released to ${d.seller.name}`);
+    } else if (d.stage === "inspecting" && d.disputeAt && S.t >= d.disputeAt) {
+      openDispute(d);
+    } else if (d.stage === "review" && S.t >= d.resolveAt) {
+      resolve(d, true);
+    }
+  }
+
+  function openDispute(d) {
+    S.k.disputes++; d.seller.disputes++;
+    const laptop = d.terms.product !== "monitor-27-4k", promised = d.terms.specs.battery_health;
+    let claim, ev = { photo: "evidence.jpg" }, days = Math.floor((S.t - d.deliverAt) / TICKS_PER_DAY);
+    if (!d.defect) { claim = laptop ? "battery_below_promised" : "arrived_dead"; if (laptop) ev.measured_battery_health = promised - 1; else days = 4; }
+    else if (laptop) {
+      claim = S.rnd() < 0.7 ? "battery_below_promised" : "arrived_dead";
+      if (claim === "battery_below_promised") ev.measured_battery_health = promised - RI(4, 14);
+    } else claim = S.rnd() < 0.6 ? "arrived_dead" : "not_as_described";
+    if (d.defect && S.rnd() < 0.08) days = 4;                      // some buyers report too late
+    d.claim = claim; d.review = reviewDispute(d.terms, claim, ev, days, true, true);
+    log("dispute", `Deal #${d.id}: buyer disputes (${claim.replaceAll("_", " ")}); panel recommends ${d.review.outcome.replaceAll("_", " ")}${d.review.refund ? ` $${Math.round(d.review.refund)}` : ""}`);
+    if (d.review.needsHuman) { d.stage = "review"; d.resolveAt = S.t + RI(12, 60); }
+    else resolve(d, false);
+  }
+
+  function resolve(d, human) {
+    let refund = 0;
+    const out = d.review.outcome;
+    if (out === "full_refund_on_return") refund = d.price;
+    else if (out === "partial_refund") refund = Math.min(d.review.refund, d.price);
+    else if (out === "human_judgement") refund = Math.round(d.price * 0.15);  // reviewer's call in the sim
+    d.refund = refund; d.stage = "resolved";
+    if (refund > 0) { S.k.refunds++; S.k.refundSum += refund; d.seller.refunds += refund; }
+    else S.k.rejected++;
+    d.seller.released += d.price - refund;
+    log("resolve", `Deal #${d.id} settled${human ? " by a human reviewer" : " automatically"}: ${refund ? `$${Math.round(refund)} back to buyer` : "claim rejected"}, $${Math.round(d.price - refund)} to ${d.seller.name}`);
+  }
+
+  // ---------------------------------------------------------- tick
+  function tick() {
+    S.t++;
+    if (S.rnd() < S.rate / TICKS_PER_DAY) arrive();
+    for (const b of S.buyers) {
+      if (b.state === "negotiating") {
+        b.round++;
+        if (b.round >= b.neg.rounds.length) { b.state = "awaiting"; b.decideAt = S.t + RI(2, 8); }
+      } else if (b.state === "awaiting" && S.t >= b.decideAt) {
+        const pApprove = b.neg.price > 0.97 * b.m.maxPrice ? 0.75 : 0.92;
+        if (S.rnd() < pApprove) approve(b);
+        else { b.state = "declined"; b.done = S.t; S.k.declined++; log("decline", `Buyer #${b.id} (${b.asst.name}) declined $${b.neg.price}`); }
+      }
+    }
+    if (S.buyers.length > 160) S.buyers.length = 160;
+    for (const d of S.deals) progressDeal(d);
+    if (S.t % 12 === 0) snapshotBands();
+    if (S.t % (TICKS_PER_DAY / 4) === 0) {                             // restock every 6 hours
+      for (const s of S.sellers) if (stockOf(s) < 4 && S.rnd() < 0.8) {
+        const l = makeListing(s, wpick(PRODUCT_MIX));
+        log("restock", `${s.name} listed ${SEED.products[l.product].title} at $${l.list} (floor private)`);
+      }
+    }
+    if (S.t % TICKS_PER_DAY === 0)                                       // market value drifts
+      for (const k in S.value) S.value[k] *= 1 + (S.rnd() - 0.5) * 0.012;
+  }
+
+  S.tick = tick; S.stockOf = stockOf; S.sellerOf = sellerOf;
+  return S;
+}
+
+
+
+const $ = id => document.getElementById(id);
+const money = x => "$" + Math.round(x).toLocaleString("en-US");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ACOLOR = { chatgpt: "var(--a1)", claude: "var(--a2)", gemini: "var(--a3)", grok: "var(--a4)", deepseek: "var(--a5)", small: "var(--a6)" };
+const clockText = t => { const d = Math.floor(t / TICKS_PER_DAY) + 1, m = (t % TICKS_PER_DAY) * 10; return `Day ${d} · ${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+const ago = t => { const m = (S.t - t) * 10; return m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`; };
+
+let S, speed = 4, running = true, timer = null, frame = 0;
+const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function start() {
+  $("summary").hidden = true; running = !reduce; $("play").textContent = running ? "Pause" : "Play";
+  S = createSim({ seed: +$("seed").value || 7, rate: +$("rate").value, risk: +$("risk").value, respectMarket: $("market").checked });
+  for (let i = 0; i < Math.round(TICKS_PER_DAY * 1.5); i++) S.tick();   // warm up 1.5 days so the board is full
+  renderAll();
+}
+const limitTicks = () => +$("days").value * TICKS_PER_DAY;
+function loop() {
+  if (running && !document.hidden) {
+    for (let i = 0; i < speed; i++) { if (limitTicks() && S.t >= limitTicks()) break; S.tick(); }
+    frame++; renderAll();
+    if (limitTicks() && S.t >= limitTicks()) finish();
+  }
+  timer = setTimeout(loop, 160);
+}
+function finish() {
+  running = false; $("play").textContent = "Play";
+  const k = S.k, days = Math.round(S.t / TICKS_PER_DAY);
+  const saved = Object.values(S.fair).reduce((a, f) => a + (f.alone - f.eng), 0);
+  $("summary").hidden = false;
+  $("summary").innerHTML = `<div class="head"><h3>Run complete: ${days} simulated days</h3><span class="pill g">paused</span></div>
+    <p>${k.arrived.toLocaleString()} buyer agents, ${k.approved.toLocaleString()} deals, ${money(k.gmv)} in sales and ${money(k.revenue)} platform revenue.
+    Dispute rate ${k.delivered ? (100 * k.disputes / k.delivered).toFixed(1) : "0.0"}%. Budgets and floors crossed: ${k.capViolations}.
+    The shared engine saved buyers ${money(saved)} compared with each assistant bargaining alone.</p>
+    <p class="small muted" style="margin-top:6px">Press Play to keep going past the limit, or Restart with a new seed.</p>`;
+}
+
+// ---------------------------------------------------------------- controls
+$("play").onclick = () => {
+  if (!running && limitTicks() && S.t >= limitTicks()) $("days").value = "0";   // continue past the limit
+  running = !running; $("play").textContent = running ? "Pause" : "Play";
+};
+$("step").onclick = () => { for (let i = 0; i < 6; i++) S.tick(); renderAll(); };
+document.querySelectorAll("[data-speed]").forEach(b => b.onclick = () => {
+  speed = +b.dataset.speed; document.querySelectorAll("[data-speed]").forEach(x => x.setAttribute("aria-pressed", x === b));
+});
+const syncOut = () => { $("o-rate").textContent = $("rate").value; $("o-risk").textContent = (+$("risk").value).toFixed(2) + "×"; };
+$("rate").oninput = () => { syncOut(); S.rate = +$("rate").value; };
+$("risk").oninput = () => { syncOut(); S.risk = +$("risk").value; };
+$("market").onchange = () => { S.respectMarket = $("market").checked; };
+$("reset").onclick = start;
+$("pc-product").onchange = () => renderPriceChart();
+
+// ---------------------------------------------------------------- render
+function renderAll() {
+  $("clock").innerHTML = `${clockText(S.t)}<small>simulated time · ${speed}× </small>`;
+  renderKpis(); renderBuyers(); renderNegs(); renderSellers(); renderPipe(); renderFeed();
+  if (frame % 2 === 0) { renderPriceChart(); renderFair(); }
+}
+
+function renderKpis() {
+  const k = S.k, decided = k.approved + k.declined;
+  const fairAll = Object.values(S.fair).reduce((a, f) => ({ n: a.n + f.n, d: a.d + (f.alone - f.eng) }), { n: 0, d: 0 });
+  const tile = (label, val, note, key) => `<div class="kpi${key ? " key" : ""}"><span class="small muted">${label}</span><span class="num">${val}</span><span class="small muted">${note}</span></div>`;
+  $("kpis").innerHTML =
+    tile("Buyer agents", k.arrived.toLocaleString(), `${k.matched ? Math.round(100 * k.matched / k.arrived) : 0}% found a match`) +
+    tile("Deals closed", k.approved.toLocaleString(), `${decided ? Math.round(100 * k.approved / decided) : 0}% approved by shoppers`) +
+    tile("Gross sales", money(k.gmv), "through escrow") +
+    tile("Platform revenue", money(k.revenue), "3.5% + $5 per deal", true) +
+    tile("Saved vs list", money(k.approved ? k.saved / k.approved : 0), "per deal, average") +
+    tile("Dispute rate", `${k.delivered ? (100 * k.disputes / k.delivered).toFixed(1) : "0.0"}%`, `${k.refunds} refunded · ${k.rejected} rejected`) +
+    tile("Limits crossed", String(k.capViolations), k.capViolations ? "investigate" : "budgets and floors held", !k.capViolations && false);
+}
+
+function renderBuyers() {
+  $("buyers").innerHTML = S.buyers.slice(0, 14).map(b => {
+    const st = { negotiating: ["b", `round ${b.round}/${b.neg ? b.neg.rounds.length - 1 : 0}`], awaiting: ["w", "asking shopper"],
+      approved: ["g", "bought"], declined: ["r", "declined"], nodeal: ["", "no deal"], soldout: ["r", "sold out"] }[b.state];
+    const spec = b.m.minSpecs.battery_health ? `bat ≥${b.m.minSpecs.battery_health}%` : "any battery";
+    return `<div class="bitem"><i class="dot" style="background:${ACOLOR[b.asst.key]}"></i>
+      <div><div><b>#${b.id}</b> ${esc(b.asst.name)}</div><div class="small muted">${esc(SEED.products[b.product].title)} · ${b.product === "monitor-27-4k" ? "" : spec + " · "}${b.m.deadline}d${b.m.warrantyValue ? ` · warranty $${b.m.warrantyValue}/d` : ""}</div></div>
+      <div style="text-align:right"><span class="pill ${st[0]}">${st[1]}</span><div class="t">${ago(b.t0)}</div></div></div>`;
+  }).join("");
+}
+
+function negChart(b, w = 250, h = 70) {
+  const o = b.neg, upto = b.state === "negotiating" ? b.round : o.rounds.length - 1;
+  const R = o.rounds.slice(0, upto + 1);
+  const all = o.rounds.flatMap(r => [r.ask, r.bid]);
+  const lo = Math.min(...all) - 8, hi = Math.max(...all) + 8, pad = 4;
+  const X = k => pad + k / 10 * (w - 2 * pad - 40), Y = v => pad + (hi - v) / (hi - lo) * (h - 2 * pad);
+  const pl = (key, c) => R.length ? `<polyline fill="none" stroke="${c}" stroke-width="2" points="${R.map(r => X(r.k).toFixed(1) + "," + Y(r[key]).toFixed(1)).join(" ")}"/>` : "";
+  const last = R.at(-1);
+  const end = b.state !== "negotiating"
+    ? `<circle cx="${X(last.k)}" cy="${Y(o.price)}" r="4" fill="var(--good)"/><text x="${X(last.k) + 7}" y="${Y(o.price) + 4}" font-size="11" fill="var(--ink)">${money(o.price)}</text>`
+    : `<text x="${X(last.k) + 6}" y="${Y(last.ask) + 4}" font-size="10" fill="var(--seller)">${money(last.ask)}</text><text x="${X(last.k) + 6}" y="${Y(last.bid) + 4}" font-size="10" fill="var(--buyer)">${money(last.bid)}</text>`;
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" role="img" aria-label="negotiation rounds">${pl("ask", "var(--seller)")}${pl("bid", "var(--buyer)")}${end}</svg>`;
+}
+
+function renderNegs() {
+  const show = S.buyers.filter(b => b.neg && (b.state === "negotiating" || b.state === "awaiting" || S.t - (b.done ?? S.t) < 30)).slice(0, 6);
+  if (!show.length) { $("negs").innerHTML = `<p class="muted small">Waiting for the next buyer…</p>`; return; }
+  $("negs").innerHTML = show.map(b => {
+    const l = b.listing, seller = S.sellerOf(l.seller), o = b.neg;
+    const status = { negotiating: `<span class="pill b">round ${b.round} of ${o.rounds.length - 1}</span>`, awaiting: `<span class="pill w">waiting for shopper</span>`,
+      approved: `<span class="pill g">deal ${money(o.price)}</span>`, declined: `<span class="pill r">shopper declined</span>`, soldout: `<span class="pill r">sold out</span>` }[b.state];
+    return `<div class="neg ${b.state}">
+      <div class="who"><span><i class="dot" style="background:${ACOLOR[b.asst.key]}"></i> <b>#${b.id}</b> ${esc(b.asst.name)} → ${esc(seller.name)}</span><span class="mono small muted">${l.id}</span></div>
+      ${negChart(b)}
+      <div class="row"><span class="muted">${b.contacted} contacted · ${o.warranty ? o.warranty + "d warranty" : "no warranty"} · ${o.delivery}d ship</span>${status}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderSellers() {
+  $("sellers").innerHTML = `<thead><tr><th>Seller</th><th class="num">Stock</th><th class="num">Sold</th><th class="num">Margin</th><th>Trust</th></tr></thead><tbody>` +
+    S.sellers.map(s => {
+      const trust = Math.max(0, 1 - (s.disputes + 0.5) / (s.sales + 10));
+      return `<tr><td><div>${esc(s.name)}</div><div class="small">${s.verified ? `<span class="pill g">verified</span>` : `<span class="pill w">unverified</span>`}</div></td>
+      <td class="num">${S.stockOf(s)}</td><td class="num">${s.sales}</td><td class="num">${s.sales ? money(s.margin / s.sales) : "—"}</td>
+      <td style="min-width:70px"><span class="mono small">${Math.round(trust * 100)}%</span><div class="trust"><i style="width:${trust * 100}%;background:${trust > 0.9 ? "var(--good)" : trust > 0.8 ? "var(--warn)" : "var(--bad)"}"></i></div></td></tr>`;
+    }).join("") + `</tbody>`;
+}
+
+function renderPipe() {
+  const c = { funded: 0, inspecting: 0, review: 0, released: 0, resolved: 0 }, m = { funded: 0, inspecting: 0, review: 0 };
+  let refunded = 0;
+  for (const d of S.deals) { c[d.stage]++; if (m[d.stage] != null) m[d.stage] += d.price; if (d.stage === "resolved") refunded += d.refund; }
+  const total = S.deals.length || 1;
+  const st = (label, n, note, color) => `<div class="stage"><span class="small muted">${label}</span><span class="num">${n}</span><div class="bar"><i style="width:${100 * n / total}%;background:${color}"></i></div><span class="small muted">${note}</span></div>`;
+  $("pipe").innerHTML =
+    st("In transit", c.funded, money(m.funded) + " held", "var(--buyer)") +
+    st("Inspecting", c.inspecting, money(m.inspecting) + " held", "var(--buyer)") +
+    st("Human review", c.review, money(m.review) + " held", "var(--warn)") +
+    st("Released", c.released, "paid to sellers", "var(--good)") +
+    st("Settled disputes", c.resolved, money(refunded) + " refunded", "var(--bad)") +
+    st("Total deals", S.deals.length, "since day 1", "var(--muted)");
+  const held = m.funded + m.inspecting + m.review;
+  $("pipenote").textContent = `${money(held)} is held in escrow right now. Disputes on deals over $200, or with a split vote, wait for a human reviewer.`;
+}
+
+function renderFeed() {
+  const color = { arrive: "var(--buyer)", deal: "var(--good)", decline: "var(--bad)", nodeal: "var(--muted)", dispute: "var(--warn)", resolve: "var(--warn)", release: "var(--good)", restock: "var(--seller)" };
+  $("evcount").textContent = `latest ${Math.min(S.events.length, 40)}`;
+  $("feed").innerHTML = S.events.slice(0, 40).map(e => `<div class="ev"><span class="t">${clockText(e.t).replace("Day ", "D").replace(" · ", " ")}</span><i class="dot" style="background:${color[e.kind]};margin-top:5px"></i><span>${esc(e.text)}</span></div>`).join("");
+}
+
+function renderPriceChart() {
+  const p = $("pc-product").value, W = 640, H = 250, L = 46, R = 12, T = 14, B = 26;
+  const band = S.bands[p] || [], pts = S.prices.filter(x => x.product === p);
+  const t1 = Math.max(S.t, 1), t0 = Math.max(0, t1 - TICKS_PER_DAY * 7);
+  const vis = pts.filter(x => x.t >= t0), bv = band.filter(x => x.t >= t0);
+  const vals = [...vis.map(x => x.price), ...bv.flatMap(x => [x.lo, x.hi])];
+  if (!vals.length) { $("pc").innerHTML = `<p class="muted small">No closed deals yet for this product.</p>`; return; }
+  let lo = Math.min(...vals), hi = Math.max(...vals); const padv = (hi - lo) * 0.1 + 5; lo -= padv; hi += padv;
+  const X = t => L + (t - t0) / Math.max(1, t1 - t0) * (W - L - R), Y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const step = Math.max(5, Math.round((hi - lo) / 5 / 5) * 5), ticks = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) ticks.push(v);
+  const days = []; for (let d = Math.ceil(t0 / TICKS_PER_DAY); d * TICKS_PER_DAY <= t1; d++) days.push(d);
+  const area = bv.length > 1 ? `<path d="M${bv.map(b => X(b.t).toFixed(1) + "," + Y(b.hi).toFixed(1)).join("L")}L${[...bv].reverse().map(b => X(b.t).toFixed(1) + "," + Y(b.lo).toFixed(1)).join("L")}Z" fill="var(--buyer)" opacity=".13"/>
+    <polyline fill="none" stroke="var(--buyer)" stroke-width="1.5" points="${bv.map(b => X(b.t).toFixed(1) + "," + Y(b.med).toFixed(1)).join(" ")}"/>` : "";
+  const valueLine = `<line x1="${L}" x2="${W - R}" y1="${Y(S.value[p])}" y2="${Y(S.value[p])}" stroke="var(--muted)" stroke-dasharray="4 4"/>`;
+  const dots = vis.map(x => `<circle cx="${X(x.t).toFixed(1)}" cy="${Y(x.price).toFixed(1)}" r="3" fill="${ACOLOR[x.asst]}" opacity=".85"/>`).join("");
+  const lastB = bv.at(-1);
+  $("pc-title").textContent = `Price discovery: ${vis.length} deals in the last ${Math.min(7, Math.ceil((t1 - t0) / TICKS_PER_DAY))} days`;
+  $("pc").innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Closed deal prices over time with the learned fair range">
+    ${ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${Y(v) + 4}" font-size="10.5" fill="var(--muted)" text-anchor="end">${money(v)}</text>`).join("")}
+    ${days.map(d => `<text x="${X(d * TICKS_PER_DAY)}" y="${H - 8}" font-size="10.5" fill="var(--muted)" text-anchor="middle">day ${d + 1}</text>`).join("")}
+    ${area}${valueLine}${dots}
+    ${lastB ? `<text x="${W - R}" y="${Y(lastB.hi) - 6}" font-size="10.5" fill="var(--buyer)" text-anchor="end">fair range ${money(lastB.lo)}–${money(lastB.hi)}</text>` : ""}
+  </svg>`;
+  $("pc-legend").innerHTML = `<span><i class="dot" style="background:var(--buyer);opacity:.4"></i> fair range learned from the last 30 deals</span><span><i class="dot" style="background:var(--buyer)"></i> median</span><span>- - - hidden true market value</span>` +
+    ASSISTANTS.map(a => `<span><i class="dot" style="background:${ACOLOR[a.key]}"></i> ${esc(a.name)}</span>`).join("");
+}
+
+function renderFair() {
+  const rows = ASSISTANTS.map(a => { const f = S.fair[a.key]; return { a, n: f.n, over: f.n ? (f.alone - f.eng) / f.n : 0, eng: f.n ? f.engRatio / f.n : 1, alone: f.n ? f.aloneRatio / f.n : 1 }; });
+  const max = Math.max(12, ...rows.map(r => r.over)), W = 520, rowH = 34, L = 150, T = 8;
+  const X = v => L + Math.max(0, v) / max * (W - L - 70);
+  const total = rows.reduce((s, r) => s + r.over * r.n, 0);
+  $("fc").innerHTML = `<p style="font-weight:500;margin-bottom:6px">Users of weaker assistants would pay the most more alone. Across all deals so far, the shared engine has saved buyers ${money(total)}.</p>
+  <svg viewBox="0 0 ${W} ${T + rows.length * rowH + 4}" width="100%" role="img" aria-label="Average overpay per deal without the shared engine, by assistant">
+    ${rows.map((r, i) => { const y = T + i * rowH; return `
+      <text x="0" y="${y + 15}" font-size="12" fill="var(--ink)">${esc(r.a.name)}</text><text x="0" y="${y + 28}" font-size="10" fill="var(--muted)">${esc(r.a.size)} · ${r.n} deals</text>
+      <rect x="${L}" y="${y + 6}" width="${Math.max(1, X(r.over) - L)}" height="16" rx="3" fill="${ACOLOR[r.a.key]}" opacity=".85"/>
+      <text x="${X(r.over) + 6}" y="${y + 18}" font-size="12" fill="var(--ink)">+${money(r.over)}</text>`; }).join("")}
+  </svg>
+  <p class="small muted" style="margin-top:4px">With the engine, every assistant paid on average ${(100 * rows.reduce((s, r) => s + r.eng * r.n, 0) / Math.max(1, rows.reduce((s, r) => s + r.n, 0))).toFixed(1)}% of the market median.</p>`;
+}
+
+syncOut();
+start();
+loop();
+</script>
+</body>
+</html>

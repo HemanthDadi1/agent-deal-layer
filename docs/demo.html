@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Deal Layer Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a protocol console. Header + four tabs; each tab = controls on the left, live results on the right. */
+:root{
+  --bg:#f4f6f9; --surface:#ffffff; --soft:#eef1f6; --ink:#141922; --muted:#5b6474; --line:#dde2ea;
+  --buyer:#2453c7; --seller:#b0600e; --good:#1d7a4c; --bad:#b42318; --warn:#9a6700;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1117; --surface:#161a22; --soft:#1c212b; --ink:#e6e9ef; --muted:#9aa3b3; --line:#2a303c;
+  --buyer:#7ea3ff; --seller:#f0a45c; --good:#4cc38a; --bad:#ff7b6f; --warn:#e2b340; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0e1117; --surface:#161a22; --soft:#1c212b; --ink:#e6e9ef; --muted:#9aa3b3; --line:#2a303c;
+  --buyer:#7ea3ff; --seller:#f0a45c; --good:#4cc38a; --bad:#ff7b6f; --warn:#e2b340; color-scheme:dark;}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+h1,h2,h3{font-family:var(--display);font-weight:600;line-height:1.15;text-wrap:balance;margin:0}
+h1{font-size:28px} h2{font-size:21px} h3{font-size:16px}
+p{margin:0}
+.muted{color:var(--muted)}
+.mono,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+small,.small{font-size:13px}
+
+header{border-bottom:1px solid var(--line);background:var(--surface)}
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;padding:22px 0 14px}
+.brand{display:flex;flex-direction:column;gap:6px;max-width:640px}
+.brand p{color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:6px;font:500 12px var(--mono);padding:3px 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted);background:var(--soft);white-space:nowrap}
+.pill.b{color:var(--buyer);border-color:color-mix(in srgb,var(--buyer) 35%,var(--line))}
+.pill.s{color:var(--seller);border-color:color-mix(in srgb,var(--seller) 35%,var(--line))}
+.pill.g{color:var(--good);border-color:color-mix(in srgb,var(--good) 35%,var(--line))}
+.pill.r{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 35%,var(--line))}
+.pill.w{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 35%,var(--line))}
+nav{display:flex;gap:4px;overflow-x:auto}
+nav a{font:500 14px var(--body);color:var(--muted);text-decoration:none;padding:10px 14px;border-bottom:2px solid transparent;white-space:nowrap}
+nav a span{font-family:var(--mono);font-size:12px;margin-right:6px}
+nav a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--buyer)}
+nav a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--buyer);outline-offset:2px}
+
+main{padding:24px 0 48px}
+.view{display:none}
+.view.on{display:block}
+.intro{display:flex;flex-direction:column;gap:6px;margin-bottom:18px;max-width:760px}
+.grid{display:grid;grid-template-columns:330px 1fr;gap:20px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.stack{display:flex;flex-direction:column;gap:14px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.between{justify-content:space-between}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media (max-width:640px){.cols2,.cols3{grid-template-columns:1fr}}
+
+.say{background:var(--soft);border-radius:10px 10px 10px 2px;padding:10px 12px;font-size:14px}
+.say b{font-weight:600}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+label .lv{display:flex;justify-content:space-between}
+label .lv output{font-family:var(--mono);color:var(--ink)}
+input[type=number],select{font:15px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+input[type=range]{width:100%;accent-color:var(--buyer)}
+.seller input[type=range]{accent-color:var(--seller)}
+.check{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:14px}
+button{font:500 14px var(--body);border-radius:7px;padding:9px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+button.primary{background:var(--buyer);border-color:var(--buyer);color:#fff}
+:root[data-theme="dark"] button.primary{color:#0e1117}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) button.primary{color:#0e1117}}
+button.sell{background:var(--seller);border-color:var(--seller);color:#fff}
+button.ghost{background:transparent}
+button:disabled{opacity:.45;cursor:not-allowed}
+
+.kv{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media (max-width:640px){.kv{grid-template-columns:repeat(2,1fr)}}
+.kv div{display:flex;flex-direction:column;gap:2px}
+.kv .num{font-size:20px;font-weight:500}
+.range{position:relative;height:44px;margin-top:4px}
+.checklist{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:2px;font-size:14px}
+
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{font-weight:500;color:var(--muted);text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.num,th.num{text-align:right}
+.tablewrap{overflow-x:auto}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.sw{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+
+.opts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media (max-width:820px){.opts{grid-template-columns:1fr}}
+.opt{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--surface)}
+.opt.best{border-color:var(--buyer);box-shadow:0 0 0 1px var(--buyer) inset}
+.opt .price{font:500 28px var(--mono)}
+.opt .terms{display:flex;flex-wrap:wrap;gap:6px}
+
+.notice{border-left:3px solid var(--bad);background:color-mix(in srgb,var(--bad) 8%,var(--surface));padding:10px 12px;border-radius:4px;font-size:14px}
+.notice.ok{border-color:var(--good);background:color-mix(in srgb,var(--good) 8%,var(--surface))}
+.notice.info{border-color:var(--buyer);background:color-mix(in srgb,var(--buyer) 7%,var(--surface))}
+
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;counter-reset:s}
+@media (max-width:640px){.steps{grid-template-columns:1fr 1fr}}
+.step{border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px;display:flex;flex-direction:column;gap:2px;color:var(--muted)}
+.step b{font-family:var(--mono);font-weight:500;color:var(--muted)}
+.step.done{border-color:var(--good);color:var(--ink)} .step.done b{color:var(--good)}
+.step.now{border-color:var(--buyer);color:var(--ink)} .step.now b{color:var(--buyer)}
+pre{font:12.5px/1.5 var(--mono);background:var(--soft);border-radius:8px;padding:12px;margin:0;overflow-x:auto;white-space:pre}
+.hash{font:12px var(--mono);word-break:break-all;color:var(--muted)}
+
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media (max-width:760px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.tile .num{font-size:24px;font-weight:500}
+
+.votes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+@media (max-width:760px){.votes{grid-template-columns:1fr}}
+.vote{border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.bar{display:flex;height:30px;border-radius:6px;overflow:hidden;font:500 13px var(--mono)}
+.bar span{display:flex;align-items:center;padding:0 10px;white-space:nowrap;color:#fff}
+
+.asst{display:flex;flex-direction:column;gap:10px}
+.asst pre{font-size:11.5px}
+.dealrow{display:flex;justify-content:space-between;font:13px var(--mono);border-top:1px dashed var(--line);padding-top:6px}
+footer{border-top:1px solid var(--line);padding:18px 0 28px;color:var(--muted);font-size:13px}
+footer .cols3 div{display:flex;flex-direction:column;gap:4px}
+svg text{font-family:var(--mono)}
+@media (prefers-reduced-motion:no-preference){.fade{animation:fade .35s ease-out}@keyframes fade{from{opacity:.25}to{opacity:1}}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <div class="row"><h1>Agent Deal Layer</h1><span class="pill">live demo · sample data</span></div>
+        <p>A neutral place where a buyer's AI and a seller's AI agree on a deal. Every offer comes from one shared engine, so the result is the same whichever AI the buyer uses, and money waits in escrow until the item checks out.</p>
+      </div>
+      <div class="row"><span class="pill b">buyer</span><span class="pill s">seller</span><span class="pill">10 MCP tools</span></div>
+    </div>
+    <nav aria-label="Demo sections">
+      <a href="#buyer" data-v="buyer"><span>01</span>Buyer gets a deal</a>
+      <a href="#seller" data-v="seller"><span>02</span>Seller sets a floor</a>
+      <a href="#dispute" data-v="dispute"><span>03</span>Dispute is settled</a>
+      <a href="#fairness" data-v="fairness"><span>04</span>Same deal for every AI</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ============================ BUYER ============================ -->
+<section class="view" id="v-buyer" aria-labelledby="h-buyer">
+  <div class="intro">
+    <h2 id="h-buyer">A shopper asks their AI for a laptop. The engine negotiates with every matching seller at once.</h2>
+    <p class="muted">Change the limits on the left and run it again. Sellers never see the budget; buyers never see a floor. The dashed limit lines in the charts are shown here only to explain the demo.</p>
+  </div>
+  <div class="grid">
+    <div class="stack">
+      <div class="card stack">
+        <div class="say"><b>Shopper to their AI:</b> “Find me a MacBook Air M2 with 16GB and battery above 85%. Max $750, I need it in 4 days. A warranty is worth about $1 a day to me.”</div>
+        <p class="small muted">The AI turns that into a private mandate (<span class="mono">set_mandate</span>):</p>
+        <label for="b-product">Product
+          <select id="b-product">
+            <option value="macbook-air-m2-16gb">MacBook Air M2 (16GB)</option>
+            <option value="dell-xps-13-16gb">Dell XPS 13 (16GB)</option>
+            <option value="monitor-27-4k">27-inch 4K monitor</option>
+          </select></label>
+        <label for="b-max"><span class="lv">Maximum price (private) <output id="o-max"></output></span>
+          <input type="range" id="b-max" min="200" max="900" step="5" value="750"></label>
+        <label for="b-batt"><span class="lv">Minimum battery health <output id="o-batt"></output></span>
+          <input type="range" id="b-batt" min="0" max="95" step="1" value="85"></label>
+        <label for="b-dead"><span class="lv">Deliver within <output id="o-dead"></output></span>
+          <input type="range" id="b-dead" min="1" max="10" step="1" value="4"></label>
+        <label for="b-wv"><span class="lv">Warranty worth, per day <output id="o-wv"></output></span>
+          <input type="range" id="b-wv" min="0" max="2" step="0.1" value="1"></label>
+        <label for="b-tough"><span class="lv">Toughness <output id="o-tough"></output></span>
+          <input type="range" id="b-tough" min="0" max="1" step="0.05" value="0.5"></label>
+        <label class="check" for="b-market"><input type="checkbox" id="b-market" checked> Also stop at the market walk-away price</label>
+        <button class="primary" id="b-run">Run negotiation</button>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card stack" id="b-guidance"></div>
+      <div class="card stack">
+        <div class="row between"><h3>Negotiation, seller by seller</h3>
+          <div class="legend"><span><i class="sw" style="background:var(--seller)"></i>seller asks</span><span><i class="sw" style="background:var(--buyer)"></i>buyer bids</span><span><i class="sw" style="background:var(--muted);opacity:.5"></i>private limits</span></div></div>
+        <div class="tablewrap"><table id="b-table"></table></div>
+      </div>
+      <div class="stack" id="b-options"></div>
+      <div class="card stack" id="b-escrow" hidden></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ SELLER ============================ -->
+<section class="view seller" id="v-seller" aria-labelledby="h-seller">
+  <div class="intro">
+    <h2 id="h-seller">A refurbisher lists a laptop once. Buyer agents from any AI negotiate against it around the clock.</h2>
+    <p class="muted">Set the floor and warranty cost. Six sample buyer agents, each with a private budget, negotiate one-to-one with this listing. The floor is never crossed or revealed.</p>
+  </div>
+  <div class="grid">
+    <div class="card stack">
+      <div class="say"><b>Marcus, refurbisher:</b> “I'm tired of ‘what's your lowest price?’ messages. Here's the laptop and the lowest I'll take.”</div>
+      <p class="small muted">Listing (<span class="mono">publish_listing</span>):</p>
+      <div class="cols2">
+        <label for="s-list">List price ($)<input type="number" id="s-list" value="799" min="300" max="1500" step="1"></label>
+        <label for="s-floor">Floor, private ($)<input type="number" id="s-floor" value="670" min="300" max="1500" step="1"></label>
+        <label for="s-batt">Battery health (%)<input type="number" id="s-batt" value="93" min="50" max="100" step="1"></label>
+        <label for="s-days">Ships in (days)<input type="number" id="s-days" value="3" min="1" max="10" step="1"></label>
+      </div>
+      <label for="s-wcost"><span class="lv">30-day warranty costs me, per day <output id="o-wcost"></output></span>
+        <input type="range" id="s-wcost" min="0" max="1" step="0.05" value="0.3"></label>
+      <label for="s-tough"><span class="lv">Toughness <output id="o-stough"></output></span>
+        <input type="range" id="s-tough" min="0" max="1" step="0.05" value="0.6"></label>
+      <button class="sell" id="s-run">Publish and simulate buyers</button>
+    </div>
+    <div class="stack">
+      <div id="s-hint"></div>
+      <div class="tiles" id="s-tiles"></div>
+      <div class="card stack">
+        <h3>Incoming buyer agents</h3>
+        <div class="tablewrap"><table id="s-table"></table></div>
+        <p class="small muted">Budgets stay private: the seller only sees outcomes. “Margin” is the price above your floor after warranty and shipping costs.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ DISPUTE ============================ -->
+<section class="view" id="v-dispute" aria-labelledby="h-dispute">
+  <div class="intro">
+    <h2 id="h-dispute">The battery arrives worse than promised. The signed record and the evidence decide, not who complains loudest.</h2>
+    <p class="muted" id="d-source"></p>
+  </div>
+  <div class="grid">
+    <div class="card stack">
+      <label for="d-claim"><span>Claim (<span class="mono">open_dispute</span>)</span>
+        <select id="d-claim">
+          <option value="battery_below_promised">Battery below what was promised</option>
+          <option value="arrived_dead">Arrived dead</option>
+          <option value="not_as_described">Not as described (subjective)</option>
+        </select></label>
+      <label for="d-meas"><span class="lv">Battery measured by buyer <output id="o-meas"></output></span>
+        <input type="range" id="d-meas" min="60" max="100" step="1" value="78"></label>
+      <label for="d-days"><span class="lv">Days since delivery <output id="o-ddays"></output></span>
+        <input type="range" id="d-days" min="0" max="7" step="1" value="1"></label>
+      <label class="check" for="d-evid"><input type="checkbox" id="d-evid" checked> Battery report screenshot attached</label>
+      <label class="check" for="d-tamper"><input type="checkbox" id="d-tamper"> Claimant shows an edited record (battery 99%)</label>
+      <button class="primary" id="d-run">Send to the dispute panel</button>
+    </div>
+    <div class="stack">
+      <div class="card stack">
+        <div class="row between"><h3>Signed deal record</h3><span id="d-verified"></span></div>
+        <pre id="d-record"></pre>
+        <div class="hash" id="d-hash"></div>
+      </div>
+      <div class="card stack" id="d-panel"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ FAIRNESS ============================ -->
+<section class="view" id="v-fairness" aria-labelledby="h-fair">
+  <div class="intro">
+    <h2 id="h-fair">With a shared engine, the buyer's choice of AI no longer changes the price.</h2>
+    <p class="muted">Anthropic's Project Deal found people represented by weaker models got worse deals without noticing, and Microsoft's Magentic Marketplace found agents easy to manipulate. Here the AI only states limits; the engine makes every offer.</p>
+  </div>
+  <div class="stack">
+    <div class="card stack">
+      <div class="row between"><h3>Same shopper, three assistants, phrased three ways</h3><span id="f-same"></span></div>
+      <div class="cols3" id="f-asst"></div>
+    </div>
+    <div class="card stack">
+      <h3>The same seller, with and without the shared engine</h3>
+      <p class="small muted">Without it, each assistant bargains on its own: a weaker model opens higher and gives ground faster (simulated). Seller: BayTech Resale, MacBook Air M2, battery 91%, no warranty.</p>
+      <p id="f-head" style="font-weight:500"></p>
+      <div id="f-chart"></div>
+      <p class="small muted">The strongest assistant does about as well on its own. Weaker ones overpay, and their users never find out. With the engine, everyone gets the same fair price.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap cols3">
+    <div><b class="mono">Real in this demo</b><span>The negotiation engine, ranking, hard caps, dispute rules and SHA-256 deal hashes run live in your browser, ported line for line from the Python MCP server.</span></div>
+    <div><b class="mono">Simulated</b><span>Listings, sellers and recent prices are sample data. Escrow is a state machine standing in for Stripe Connect. Part B of the fairness view is a simulation.</span></div>
+    <div><b class="mono">Next</b><span>A 25-seller pilot in used and refurbished electronics, with real escrow and the MCP server listed for ChatGPT and Claude.</span></div>
+  </div>
+</footer>
+
+<script>
+// ---- Agent Deal Layer engine (port of agentdeal/engine.py + ledger rules) ----
+const ROUNDS = 10;
+const COND = { A: 3, B: 2, C: 1 };
+const HUMAN_REVIEW_ABOVE = 200, INSPECTION_DAYS = 3;
+
+const SEED = {
+  products: {
+    "macbook-air-m2-16gb": { title: "MacBook Air M2 (16GB)", launch: 1399,
+      comps: [640, 655, 662, 670, 678, 685, 690, 702, 710, 720],
+      checklist: ["Battery cycle count and health %", "Activation Lock / Find My is off",
+        "Keyboard, trackpad and screen: no dead keys or pixels", "Original charger included",
+        "Serial number matches and is not reported stolen"] },
+    "dell-xps-13-16gb": { title: "Dell XPS 13 (16GB)", launch: 1299,
+      comps: [480, 495, 505, 515, 520, 530, 545, 560],
+      checklist: ["Battery health in Dell Power Manager", "BIOS password removed",
+        "Windows license activated", "Hinge and screen condition"] },
+    "monitor-27-4k": { title: "27-inch 4K monitor", launch: 399,
+      comps: [205, 212, 219, 225, 229, 234, 240, 249],
+      checklist: ["Dead or stuck pixels", "Backlight bleed in a dark room", "Stand and cables included"] },
+  },
+  sellers: {
+    S1: { name: "Marcus Refurb Co.", toughness: 0.6, verified: true },
+    S2: { name: "BayTech Resale", toughness: 0.4, verified: true },
+    S3: { name: "Campus Gadgets", toughness: 0.7, verified: true },
+    S4: { name: "QuickFlip Electronics", toughness: 0.5, verified: false },
+  },
+  listings: [
+    { id: "L1", seller: "S1", product: "macbook-air-m2-16gb", list: 749, floor: 655,
+      specs: { ram_gb: 16, storage_gb: 512, battery_health: 88, condition: "A" },
+      warranty: [{ days: 0, cpd: 0 }, { days: 30, cpd: 0.35 }, { days: 90, cpd: 0.3 }],
+      delivery: [{ days: 5, cost: 0 }, { days: 2, cost: 15 }] },
+    { id: "L2", seller: "S2", product: "macbook-air-m2-16gb", list: 729, floor: 660,
+      specs: { ram_gb: 16, storage_gb: 256, battery_health: 91, condition: "A" },
+      warranty: [{ days: 0, cpd: 0 }], delivery: [{ days: 3, cost: 0 }] },
+    { id: "L3", seller: "S3", product: "macbook-air-m2-16gb", list: 799, floor: 690,
+      specs: { ram_gb: 16, storage_gb: 512, battery_health: 95, condition: "A" },
+      warranty: [{ days: 0, cpd: 0 }, { days: 60, cpd: 0.25 }],
+      delivery: [{ days: 4, cost: 0 }, { days: 1, cost: 25 }] },
+    { id: "L4", seller: "S4", product: "macbook-air-m2-16gb", list: 690, floor: 610,
+      specs: { ram_gb: 16, storage_gb: 256, battery_health: 82, condition: "B" },
+      warranty: [{ days: 0, cpd: 0 }], delivery: [{ days: 6, cost: 0 }] },
+    { id: "L5", seller: "S1", product: "macbook-air-m2-16gb", list: 769, floor: 700,
+      specs: { ram_gb: 16, storage_gb: 1024, battery_health: 90, condition: "A" },
+      warranty: [{ days: 0, cpd: 0 }, { days: 30, cpd: 0.35 }], delivery: [{ days: 7, cost: 0 }] },
+    { id: "L6", seller: "S2", product: "dell-xps-13-16gb", list: 579, floor: 505,
+      specs: { ram_gb: 16, storage_gb: 512, battery_health: 86, condition: "A" },
+      warranty: [{ days: 0, cpd: 0 }, { days: 30, cpd: 0.3 }], delivery: [{ days: 3, cost: 0 }] },
+    { id: "L7", seller: "S1", product: "monitor-27-4k", list: 259, floor: 214,
+      specs: { condition: "A" },
+      warranty: [{ days: 0, cpd: 0 }, { days: 90, cpd: 0.08 }], delivery: [{ days: 5, cost: 0 }] },
+  ],
+};
+
+// Python's round(): half to even, so prices match the Python POC exactly.
+function pyRound(x) {
+  const f = Math.floor(x), d = x - f;
+  if (Math.abs(d - 0.5) < 1e-9) return f % 2 === 0 ? f : f + 1;
+  return Math.round(x);
+}
+const r2 = x => Math.round(x * 100) / 100;
+
+function pct(s, p) {
+  const k = (s.length - 1) * p, lo = Math.floor(k), hi = Math.ceil(k);
+  return s[lo] + (s[hi] - s[lo]) * (k - lo);
+}
+function median(s) {
+  const n = s.length;
+  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+}
+
+function guidance(productKey) {
+  const p = SEED.products[productKey];
+  const s = [...p.comps].sort((a, b) => a - b);
+  const p25 = pct(s, 0.25), mid = median(s), p75 = pct(s, 0.75);
+  return { title: p.title, launch: p.launch, deals: s.length, comps: s,
+    fair: [pyRound(p25), pyRound(p75)], median: pyRound(mid),
+    opening: pyRound(p25 - 0.5 * (mid - p25)), walk: pyRound(p75 + 0.5 * (p75 - p25)),
+    checklist: p.checklist };
+}
+
+function matches(m, l) {
+  if (l.product !== m.product) return [false, "different product"];
+  for (const [k, v] of Object.entries(m.minSpecs || {}))
+    if ((l.specs[k] || 0) < v) return [false, `${k.replace("_", " ")} below requirement`];
+  if ((COND[l.specs.condition || "C"] || 0) < (COND[m.minCondition || "C"] || 0))
+    return [false, "condition below requirement"];
+  if (!l.delivery.some(d => d.days <= m.deadline)) return [false, "cannot deliver by the deadline"];
+  return [true, ""];
+}
+
+const exponent = t => 0.3 + 1.7 * (1 - Math.min(Math.max(t, 0), 1));
+const fraction = (k, t) => Math.pow(k / ROUNDS, 1 / exponent(t));
+
+function negotiatePackage(m, l, opening, w, d, walk) {
+  const sellerT = SEED.sellers[l.seller] ? SEED.sellers[l.seller].toughness : (l.toughness ?? 0.5);
+  const sellerReserve = l.floor + w.days * w.cpd + d.cost;
+  let buyerReserve = m.maxPrice;
+  if (walk != null) buyerReserve = Math.min(buyerReserve, walk + 0.5 * w.days * m.warrantyValue);
+  const base = { listing: l.id, seller: l.seller, warranty: w.days, delivery: d.days,
+    sellerReserve, buyerReserve };
+  if (sellerReserve > buyerReserve)
+    return { ...base, agreed: false, price: null, rounds: [], reason: "no overlap between the two sides' limits" };
+  const ask0 = Math.max(l.list + w.days * w.cpd + d.cost, sellerReserve);
+  const bid0 = Math.min(opening, buyerReserve);
+  const rounds = [];
+  for (let k = 0; k <= ROUNDS; k++) {
+    const ask = ask0 - (ask0 - sellerReserve) * fraction(k, sellerT);
+    const bid = bid0 + (buyerReserve - bid0) * fraction(k, m.toughness);
+    rounds.push({ k, ask: r2(ask), bid: r2(bid) });
+    if (bid >= ask) {
+      let price = (ask + bid) / 2;
+      if (Math.ceil(sellerReserve) <= Math.floor(buyerReserve))
+        price = Math.min(Math.max(pyRound(price), Math.ceil(sellerReserve)), Math.floor(buyerReserve));
+      else price = r2(Math.min(Math.max(price, sellerReserve), buyerReserve));
+      return { ...base, agreed: true, price, rounds, utility: r2(w.days * m.warrantyValue - price) };
+    }
+  }
+  return { ...base, agreed: false, price: null, rounds, reason: "no agreement within 10 rounds" };
+}
+
+function negotiateListing(m, l, opening, walk) {
+  let best = null;
+  for (const w of l.warranty) for (const d of l.delivery) {
+    if (d.days > m.deadline) continue;
+    const o = negotiatePackage(m, l, opening, w, d, walk);
+    if (!o.agreed) { if (!best) best = o; continue; }
+    if (!best || !best.agreed || o.utility > best.utility ||
+        (o.utility === best.utility && (o.price < best.price ||
+          (o.price === best.price && o.delivery < best.delivery)))) best = o;
+  }
+  return best;
+}
+
+function runNegotiation(m, listings = SEED.listings) {
+  const g = guidance(m.product);
+  const walk = m.respectMarket ? g.walk : null;
+  const considered = [], skipped = [];
+  for (const l of [...listings].sort((a, b) => a.id.localeCompare(b.id))) {
+    const [ok, why] = matches(m, l);
+    if (!ok) { if (l.product === m.product) skipped.push({ listing: l.id, reason: why }); continue; }
+    considered.push(negotiateListing(m, l, g.opening, walk));
+  }
+  const best = considered.filter(o => o.agreed)
+    .sort((a, b) => b.utility - a.utility || a.price - b.price || a.listing.localeCompare(b.listing));
+  return { guidance: g, considered, best: best.slice(0, 3), skipped,
+    noDeal: considered.filter(o => !o.agreed) };
+}
+
+// ---- dispute panel (port of ledger.review_dispute) ----
+function ruleFor(claim, terms, ev) {
+  const price = terms.price;
+  if (claim === "arrived_dead") return { outcome: "full_refund_on_return", refund: price };
+  if (claim === "battery_below_promised") {
+    const promised = terms.specs.battery_health, measured = ev.measured_battery_health;
+    if (promised == null || measured == null) return { outcome: "need_more_evidence", refund: 0 };
+    const gap = promised - measured;
+    if (gap <= 2) return { outcome: "reject_claim", refund: 0 };
+    return { outcome: "partial_refund", refund: Math.min(price, 5 * gap) };
+  }
+  if (claim === "not_as_described") return { outcome: "human_judgement", refund: 0 };
+  return { outcome: "unknown_claim", refund: 0 };
+}
+
+function reviewDispute(terms, claim, ev, days, recordOk, presentedMatches) {
+  const integrity = !recordOk
+    ? { reviewer: "Integrity", vote: "escalate", why: "stored record failed verification" }
+    : !presentedMatches
+      ? { reviewer: "Integrity", vote: "reject_claim", why: "record shown by the claimant does not match the signed record" }
+      : { reviewer: "Integrity", vote: "ok", why: "signed record verified" };
+  const rr = ruleFor(claim, terms, ev);
+  const rules = { reviewer: "Rules", vote: rr.outcome, refund: rr.refund, why: "applied the fixed rule table" };
+  let evidence;
+  if (days > INSPECTION_DAYS) evidence = { reviewer: "Evidence", vote: "reject_claim", why: "opened after the 3-day inspection window" };
+  else if (!Object.keys(ev).length) evidence = { reviewer: "Evidence", vote: "need_more_evidence", why: "no evidence attached" };
+  else evidence = { reviewer: "Evidence", vote: rr.outcome, refund: rr.refund, why: "evidence present and inside the inspection window" };
+  const votes = [integrity, rules, evidence];
+  let outcome, refund, unanimous;
+  if (integrity.vote !== "ok") { outcome = integrity.vote; refund = 0; unanimous = true; }
+  else {
+    outcome = rules.vote; refund = rules.refund || 0; unanimous = rules.vote === evidence.vote;
+    if (!unanimous && ["reject_claim", "need_more_evidence"].includes(evidence.vote)) { outcome = evidence.vote; refund = 0; }
+  }
+  const needsHuman = !unanimous || terms.price > HUMAN_REVIEW_ABOVE || ["human_judgement", "escalate"].includes(outcome);
+  return { votes, outcome, refund, needsHuman };
+}
+
+
+
+// ------------------------------------------------------------- helpers
+const $ = id => document.getElementById(id);
+const money = (x, cents) => "$" + (cents ? x.toFixed(2) : Math.round(x).toLocaleString("en-US"));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const sellerName = id => (SEED.sellers[id] || { name: "Your shop" }).name;
+const listingById = id => SEED.listings.find(l => l.id === id);
+const state = { result: null, deal: null, stage: 0, disputeResolved: null };
+
+function canonical(v) {
+  if (Array.isArray(v)) return "[" + v.map(canonical).join(",") + "]";
+  if (v && typeof v === "object") return "{" + Object.keys(v).sort().map(k => JSON.stringify(k) + ":" + canonical(v[k])).join(",") + "}";
+  return JSON.stringify(v);
+}
+async function sha256(text) {
+  try {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+  } catch (e) { return null; }
+}
+
+// ------------------------------------------------------------- router
+const VIEWS = ["buyer", "seller", "dispute", "fairness"];
+function show() {
+  const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "buyer";
+  VIEWS.forEach(n => $("v-" + n).classList.toggle("on", n === v));
+  document.querySelectorAll("nav a").forEach(a => a.toggleAttribute("aria-current", a.dataset.v === v) || (a.dataset.v === v && a.setAttribute("aria-current", "page")));
+  if (v === "dispute") renderDispute();
+}
+window.addEventListener("hashchange", show);
+
+// ------------------------------------------------------------- charts
+function roundsChart(o, w = 260, h = 92) {
+  if (!o.rounds.length) return `<svg width="${w}" height="${h}" role="img" aria-label="no overlap"><text x="8" y="${h / 2}" font-size="11" fill="var(--muted)">limits never overlap</text></svg>`;
+  const asks = o.rounds.map(r => r.ask), bids = o.rounds.map(r => r.bid);
+  const lo = Math.min(...bids, o.sellerReserve) - 6, hi = Math.max(...asks, o.buyerReserve) + 6;
+  const pad = 6, X = k => pad + k / 10 * (w - 2 * pad), Y = v => pad + (hi - v) / (hi - lo) * (h - 2 * pad - 12);
+  const line = (vals, c) => `<polyline fill="none" stroke="${c}" stroke-width="2" points="${vals.map((v, k) => X(k).toFixed(1) + "," + Y(v).toFixed(1)).join(" ")}"/>`;
+  const hline = (v, c) => `<line x1="${pad}" x2="${w - pad}" y1="${Y(v)}" y2="${Y(v)}" stroke="${c}" stroke-dasharray="3 3" opacity=".55"/>`;
+  const last = o.rounds.length - 1;
+  const dot = o.agreed ? `<circle cx="${X(last)}" cy="${Y(o.price)}" r="4.5" fill="var(--good)"/><text x="${Math.min(X(last) + 7, w - 44)}" y="${Y(o.price) - 7}" font-size="11" fill="var(--ink)">${money(o.price)}</text>` : "";
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="asks and bids over ${o.rounds.length} rounds">
+    ${hline(o.sellerReserve, "var(--seller)")}${hline(o.buyerReserve, "var(--buyer)")}
+    ${line(asks, "var(--seller)")}${line(bids, "var(--buyer)")}${dot}
+    <text x="${pad}" y="${h - 2}" font-size="10" fill="var(--muted)">round 0</text><text x="${w - pad}" y="${h - 2}" font-size="10" fill="var(--muted)" text-anchor="end">round ${last}</text></svg>`;
+}
+
+function rangeBar(g, maxPrice) {
+  const lo = Math.min(g.comps[0], g.opening) - 20, hi = Math.max(g.comps.at(-1), g.walk, maxPrice) + 20;
+  const W = 600, X = v => (v - lo) / (hi - lo) * W;
+  const tick = (v, label, c, y) => `<line x1="${X(v)}" x2="${X(v)}" y1="14" y2="30" stroke="${c}" stroke-width="2"/><text x="${X(v)}" y="${y}" font-size="11" fill="${c}" text-anchor="middle">${label}</text>`;
+  return `<svg viewBox="-30 0 ${W + 60} 46" width="100%" height="46" role="img" aria-label="fair price range">
+    <line x1="0" x2="${W}" y1="22" y2="22" stroke="var(--line)" stroke-width="2"/>
+    <rect x="${X(g.fair[0])}" y="16" width="${X(g.fair[1]) - X(g.fair[0])}" height="12" rx="3" fill="var(--buyer)" opacity=".18"/>
+    ${g.comps.map(c => `<circle cx="${X(c)}" cy="22" r="3" fill="var(--muted)" opacity=".7"/>`).join("")}
+    ${tick(g.opening, "open " + money(g.opening), "var(--buyer)", 44)}
+    ${tick(g.median, "median " + money(g.median), "var(--ink)", 10)}
+    ${tick(g.walk, "walk away " + money(g.walk), "var(--warn)", 44)}
+    ${maxPrice <= hi ? tick(maxPrice, "your max", "var(--muted)", 10) : ""}</svg>`;
+}
+
+// ------------------------------------------------------------- BUYER
+function readMandate() {
+  const product = $("b-product").value;
+  const batt = +$("b-batt").value;
+  const minSpecs = product === "monitor-27-4k" ? {} : { ram_gb: 16, ...(batt ? { battery_health: batt } : {}) };
+  return { product, maxPrice: +$("b-max").value, deadline: +$("b-dead").value, warrantyValue: +$("b-wv").value,
+    minSpecs, toughness: +$("b-tough").value, respectMarket: $("b-market").checked };
+}
+function syncBuyerOutputs() {
+  $("o-max").textContent = money(+$("b-max").value);
+  $("o-batt").textContent = +$("b-batt").value ? $("b-batt").value + "%" : "any";
+  $("o-dead").textContent = $("b-dead").value + (+$("b-dead").value === 1 ? " day" : " days");
+  $("o-wv").textContent = money(+$("b-wv").value, true);
+  $("o-tough").textContent = (+$("b-tough").value).toFixed(2);
+  $("b-batt").disabled = $("b-product").value === "monitor-27-4k";
+}
+$("b-product").addEventListener("change", () => {
+  const p = $("b-product").value;
+  $("b-max").value = p === "monitor-27-4k" ? 260 : p === "dell-xps-13-16gb" ? 560 : 750;
+  $("b-dead").value = p === "monitor-27-4k" ? 7 : 4;
+  syncBuyerOutputs(); runBuyer();
+});
+["b-max", "b-batt", "b-dead", "b-wv", "b-tough"].forEach(id => $(id).addEventListener("input", syncBuyerOutputs));
+$("b-run").addEventListener("click", runBuyer);
+
+function runBuyer() {
+  const m = readMandate();
+  const r = runNegotiation(m);
+  state.result = r; state.mandate = m;
+  const g = r.guidance;
+  $("b-guidance").innerHTML = `
+    <div class="row between"><h3>Price guidance <span class="mono small muted">get_price_guidance</span></h3><span class="pill">${g.deals} recent deals</span></div>
+    <div class="kv">
+      <div><span class="small muted">Launch price</span><span class="num">${money(g.launch)}</span></div>
+      <div><span class="small muted">Fair range now</span><span class="num">${money(g.fair[0])}–${money(g.fair[1])}</span></div>
+      <div><span class="small muted">Suggested opening</span><span class="num" style="color:var(--buyer)">${money(g.opening)}</span></div>
+      <div><span class="small muted">Walk away above</span><span class="num" style="color:var(--warn)">${money(g.walk)}</span></div>
+    </div>
+    ${rangeBar(g, m.maxPrice)}
+    <details><summary class="small">Inspection checklist for this product (${g.checklist.length})</summary><ul class="checklist">${g.checklist.map(c => `<li>${esc(c)}</li>`).join("")}</ul></details>`;
+
+  const rows = [...r.considered.map(o => ({ o })), ...r.skipped.map(s => ({ s }))]
+    .sort((a, b) => (a.o || a.s).listing.localeCompare((b.o || b.s).listing));
+  $("b-table").innerHTML = `<thead><tr><th>Seller</th><th>Listing</th><th>Negotiation</th><th class="num">Result</th></tr></thead><tbody>` +
+    rows.map(({ o, s }) => {
+      const l = listingById((o || s).listing);
+      const who = `<div>${esc(sellerName(l.seller))}</div><div class="small muted">${SEED.sellers[l.seller].verified ? "verified" : "unverified"}</div>`;
+      const spec = `<div class="mono small">${l.id} · list ${money(l.list)}</div><div class="small muted">${l.specs.battery_health ? "battery " + l.specs.battery_health + "% · " : ""}grade ${l.specs.condition}</div>`;
+      if (s) return `<tr><td>${who}</td><td>${spec}</td><td class="small muted">Not contacted: ${esc(s.reason)}</td><td class="num"><span class="pill">skipped</span></td></tr>`;
+      const res = o.agreed
+        ? `<div class="num">${money(o.price)}</div><div class="small muted">${o.warranty ? o.warranty + "-day warranty" : "no warranty"} · ${o.delivery}d</div>`
+        : `<span class="pill r">no deal</span><div class="small muted">${esc(o.reason)}</div>`;
+      return `<tr><td>${who}</td><td>${spec}</td><td>${roundsChart(o)}</td><td class="num">${res}</td></tr>`;
+    }).join("") + `</tbody>`;
+
+  if (!r.best.length) {
+    $("b-options").innerHTML = `<div class="notice">No seller could meet these limits. Raise the maximum price, relax the specs, or allow a later delivery.</div>`;
+  } else {
+    $("b-options").innerHTML = `<div class="row between"><h3>Options shown to the shopper</h3><span class="small muted mono">start_negotiation → top ${r.best.length}</span></div>
+    <div class="opts">${r.best.map((o, i) => {
+      const l = listingById(o.listing), saved = l.list - o.price;
+      return `<div class="opt ${i === 0 ? "best" : ""} fade">
+        <div class="row between"><span class="small muted">Option ${i + 1}${i === 0 ? " · best value for you" : ""}</span><span class="mono small">${l.id}</span></div>
+        <div class="price">${money(o.price)}</div>
+        <div class="terms"><span class="pill ${o.warranty ? "g" : ""}">${o.warranty ? o.warranty + "-day warranty" : "no warranty"}</span><span class="pill">${o.delivery}-day delivery</span>${l.specs.battery_health ? `<span class="pill">battery ${l.specs.battery_health}%</span>` : ""}</div>
+        <p class="small muted">${esc(sellerName(l.seller))} · ${saved > 0 ? money(saved) + " below list" : "at list"} · ${o.rounds.length} rounds</p>
+        <div class="row"><button class="ghost" data-ai="${i}">AI approves alone</button><button class="primary" data-ok="${i}">Shopper says yes</button></div>
+      </div>`;
+    }).join("")}</div><div id="b-msg"></div>`;
+    $("b-options").querySelectorAll("[data-ai]").forEach(b => b.onclick = () => {
+      $("b-msg").innerHTML = `<div class="notice fade"><b>Refused:</b> “the human buyer must confirm before money moves.” An AI can never approve a payment on its own.</div>`;
+    });
+    $("b-options").querySelectorAll("[data-ok]").forEach(b => b.onclick = () => approve(r.best[+b.dataset.ok]));
+  }
+  $("b-escrow").hidden = true;
+}
+
+async function approve(o) {
+  const l = listingById(o.listing);
+  const record = { deal_id: "D-" + l.id + "-" + o.price, listing_id: l.id, seller_id: l.seller,
+    terms: { product: l.product, price: o.price, warranty_days: o.warranty, delivery_days: o.delivery, specs: l.specs },
+    approved_by: ["buyer", "seller (auto-approved within their floor)"] };
+  const hash = await sha256(canonical(record));
+  state.deal = { record, hash }; state.stage = 1; state.disputeResolved = null;
+  $("b-msg").innerHTML = "";
+  renderEscrow();
+}
+function renderEscrow() {
+  const { record, hash } = state.deal, t = record.terms, s = state.stage;
+  const step = (i, name, note) => `<div class="step ${s > i ? "done" : s === i ? "now" : ""}"><b>${String(i).padStart(2, "0")} ${name}</b><span>${note}</span></div>`;
+  const el = $("b-escrow"); el.hidden = false;
+  el.innerHTML = `<div class="row between"><h3>Deal signed, money in escrow</h3><span class="pill g">approve_deal</span></div>
+    <div class="steps">
+      ${step(1, "Funded", money(t.price) + " held, not paid to seller")}
+      ${step(2, "Delivered", "arrives in " + t.delivery_days + " days")}
+      ${step(3, "Inspected", "3 days to check the item")}
+      ${step(4, s === 4 ? "Released" : s === 5 ? "Disputed" : "Paid", s === 5 ? "sent to the dispute panel" : "seller receives " + money(t.price))}
+    </div>
+    <div class="hash">record sha256 ${hash || "(unavailable in this browser)"}</div>
+    <div class="row">
+      <button class="primary" id="e-next" ${s >= 3 ? "hidden" : ""}>${s === 1 ? "Mark delivered" : "Finish inspection"}</button>
+      <button class="primary" id="e-ok" ${s !== 3 ? "hidden" : ""}>Item checks out: release payment</button>
+      <button id="e-bad" ${s < 2 || s >= 4 ? "hidden" : ""}>Report a problem</button>
+    </div>
+    ${s === 4 ? `<div class="notice ok fade">Payment released to ${esc(sellerName(record.seller_id))}. The closed price joins the sold-price data used for future guidance.</div>` : ""}`;
+  const n = $("e-next"); if (n) n.onclick = () => { state.stage++; renderEscrow(); };
+  $("e-ok").onclick = () => { state.stage = 4; renderEscrow(); };
+  $("e-bad").onclick = () => { state.stage = 5; renderEscrow(); location.hash = "dispute"; };
+}
+
+// ------------------------------------------------------------- SELLER
+const SAMPLE_BUYERS = [
+  { who: "Buyer agent via ChatGPT", maxPrice: 760, warrantyValue: 1.0, deadline: 5, toughness: 0.5 },
+  { who: "Buyer agent via Claude", maxPrice: 705, warrantyValue: 0, deadline: 7, toughness: 0.6 },
+  { who: "Buyer agent via Gemini", maxPrice: 720, warrantyValue: 0.5, deadline: 4, toughness: 0.4 },
+  { who: "Buyer agent via a small open model", maxPrice: 680, warrantyValue: 0, deadline: 10, toughness: 0.5 },
+  { who: "Buyer agent via Claude", maxPrice: 800, warrantyValue: 1.5, deadline: 3, toughness: 0.3 },
+  { who: "Buyer agent via ChatGPT", maxPrice: 650, warrantyValue: 0, deadline: 7, toughness: 0.7 },
+];
+function syncSellerOutputs() {
+  $("o-wcost").textContent = money(+$("s-wcost").value, true);
+  $("o-stough").textContent = (+$("s-tough").value).toFixed(2);
+}
+["s-wcost", "s-tough"].forEach(id => $(id).addEventListener("input", syncSellerOutputs));
+$("s-run").addEventListener("click", runSeller);
+
+function runSeller() {
+  const list = +$("s-list").value, floor = +$("s-floor").value;
+  if (!(floor > 0) || floor > list) {
+    $("s-hint").innerHTML = `<div class="notice">The floor must be a positive price no higher than the list price. Lower the floor or raise the list price.</div>`;
+    $("s-tiles").innerHTML = ""; $("s-table").innerHTML = ""; return;
+  }
+  const wcost = +$("s-wcost").value, days = +$("s-days").value;
+  const listing = { id: "L8", seller: "YOU", toughness: +$("s-tough").value, product: "macbook-air-m2-16gb", list, floor,
+    specs: { ram_gb: 16, storage_gb: 512, battery_health: +$("s-batt").value, condition: "A" },
+    warranty: [{ days: 0, cpd: 0 }, { days: 30, cpd: wcost }], delivery: [{ days, cost: 0 }] };
+  const g = guidance(listing.product);
+  const hint = list > g.fair[1] * 1.05
+    ? `<div class="notice info fade"><b>Pricing hint:</b> your list price ${money(list)} is above the recent fair range (${money(g.fair[0])}–${money(g.fair[1])}). Buyer agents will start well below it.</div>`
+    : `<div class="notice ok fade"><b>Pricing hint:</b> ${money(list)} is within or below the recent fair range (${money(g.fair[0])}–${money(g.fair[1])}).</div>`;
+  $("s-hint").innerHTML = hint;
+
+  const results = SAMPLE_BUYERS.map(b => {
+    const m = { product: listing.product, maxPrice: b.maxPrice, deadline: b.deadline, warrantyValue: b.warrantyValue,
+      minSpecs: { ram_gb: 16 }, toughness: b.toughness, respectMarket: true };
+    if (days > b.deadline) return { b, o: { agreed: false, reason: "needs faster delivery than you offer" } };
+    return { b, o: negotiateListing(m, listing, g.opening, g.walk) };
+  });
+  const won = results.filter(x => x.o.agreed);
+  const margin = o => o.price - floor - o.warranty * wcost;
+  const avgM = won.length ? won.reduce((s, x) => s + margin(x.o), 0) / won.length : 0;
+  const rev = won.reduce((s, x) => s + x.o.price, 0);
+  const lowest = won.length ? Math.min(...won.map(x => x.o.price)) : null;
+  const tile = (label, val, note) => `<div class="tile fade"><span class="small muted">${label}</span><span class="num">${val}</span><span class="small muted">${note}</span></div>`;
+  $("s-tiles").innerHTML =
+    tile("Deals closed", `${won.length} / ${results.length}`, "buyer agents") +
+    tile("Avg. margin over floor", won.length ? money(avgM) : "—", "after warranty cost") +
+    tile("Revenue", money(rev), "held in escrow until delivery") +
+    tile("Lowest sale vs floor", lowest == null ? "—" : money(lowest), "floor " + money(floor) + ", never crossed");
+  $("s-table").innerHTML = `<thead><tr><th>Buyer</th><th>What they valued</th><th class="num">Price</th><th>Terms</th><th class="num">Margin</th></tr></thead><tbody>` +
+    results.map(({ b, o }) => `<tr><td>${esc(b.who)}</td><td class="small muted">${b.warrantyValue ? "warranty matters" : "price matters most"} · needs it in ${b.deadline}d</td>` +
+      (o.agreed
+        ? `<td class="num">${money(o.price)}</td><td><span class="pill ${o.warranty ? "g" : ""}">${o.warranty ? "30-day warranty" : "no warranty"}</span></td><td class="num">${money(margin(o))}</td>`
+        : `<td class="num"><span class="pill r">no deal</span></td><td class="small muted" colspan="2">${esc(o.reason === "no overlap between the two sides' limits" ? "their budget is below your floor (budget not shown)" : o.reason)}</td>`) + `</tr>`).join("") + `</tbody>`;
+}
+
+// ------------------------------------------------------------- DISPUTE
+const DEFAULT_DEAL = () => {
+  const o = runNegotiation({ product: "macbook-air-m2-16gb", maxPrice: 700, deadline: 5, warrantyValue: 0,
+    minSpecs: { battery_health: 90 }, toughness: 0.5, respectMarket: true }).best[0];
+  const l = listingById(o.listing);
+  return { deal_id: "D-" + l.id + "-" + o.price, listing_id: l.id, seller_id: l.seller,
+    terms: { product: l.product, price: o.price, warranty_days: o.warranty, delivery_days: o.delivery, specs: l.specs },
+    approved_by: ["buyer", "seller (auto-approved within their floor)"] };
+};
+let disputeRecord = null;
+["d-meas", "d-days"].forEach(id => $(id).addEventListener("input", syncDisputeOutputs));
+$("d-claim").addEventListener("change", syncDisputeOutputs);
+function syncDisputeOutputs() {
+  $("o-meas").textContent = $("d-meas").value + "%";
+  $("o-ddays").textContent = $("d-days").value;
+  $("d-meas").disabled = $("d-claim").value !== "battery_below_promised";
+}
+$("d-run").addEventListener("click", runDispute);
+
+async function renderDispute() {
+  const fromBuyer = state.deal && state.stage === 5;
+  const rec = fromBuyer ? state.deal.record : DEFAULT_DEAL();
+  if (disputeRecord && disputeRecord.deal_id === rec.deal_id) return;
+  disputeRecord = rec;
+  $("d-source").textContent = fromBuyer
+    ? `This is the deal you just approved on the Buyer tab (${money(rec.terms.price)}, battery listed at ${rec.terms.specs.battery_health ?? "n/a"}%).`
+    : `Sample deal: ${sellerName(rec.seller_id)}, MacBook Air M2 at ${money(rec.terms.price)}, battery listed at ${rec.terms.specs.battery_health}%. Approve a deal on the Buyer tab and report a problem to use your own.`;
+  $("d-record").textContent = JSON.stringify(rec, null, 2);
+  const h = await sha256(canonical(rec));
+  disputeRecord.__hash = h;
+  $("d-hash").textContent = "sha256 " + (h || "(unavailable in this browser)");
+  $("d-verified").innerHTML = `<span class="pill g">signature verified</span>`;
+  runDispute();
+}
+
+async function runDispute() {
+  if (!disputeRecord) return;
+  const rec = disputeRecord, terms = rec.terms, claim = $("d-claim").value;
+  const ev = {};
+  if ($("d-evid").checked) { ev.screenshot = "battery-report.png"; if (claim === "battery_below_promised") ev.measured_battery_health = +$("d-meas").value; }
+  const tamper = $("d-tamper").checked;
+  let presentedHash = rec.__hash;
+  if (tamper) {
+    const edited = JSON.parse(JSON.stringify({ ...rec, __hash: undefined }));
+    edited.terms.specs.battery_health = 99;
+    presentedHash = await sha256(canonical(edited));
+  }
+  const review = reviewDispute(terms, claim, ev, +$("d-days").value, true, !tamper);
+  const label = { ok: "record OK", reject_claim: "reject claim", partial_refund: "partial refund", full_refund_on_return: "full refund on return",
+    need_more_evidence: "need more evidence", human_judgement: "needs human judgement", escalate: "escalate", unknown_claim: "unknown claim" };
+  const tone = v => v === "ok" ? "g" : v === "reject_claim" ? "r" : v === "need_more_evidence" || v === "human_judgement" || v === "escalate" ? "w" : "b";
+  $("d-panel").innerHTML = `
+    <div class="row between"><h3>Three-reviewer panel</h3><span class="pill">${review.needsHuman ? "deal above $200 or split vote → human confirms" : "clear case → resolved automatically"}</span></div>
+    ${tamper ? `<div class="notice fade">Presented record hash <span class="mono">${(presentedHash || "").slice(0, 16)}…</span> does not match the signed record <span class="mono">${(rec.__hash || "").slice(0, 16)}…</span>. The edit is caught.</div>` : ""}
+    <div class="votes">${review.votes.map(v => `<div class="vote fade"><div class="row between"><b>${v.reviewer}</b><span class="pill ${tone(v.vote)}">${label[v.vote] || v.vote}</span></div><span class="small muted">${esc(v.why)}</span>${v.refund ? `<span class="mono small">refund ${money(v.refund)}</span>` : ""}</div>`).join("")}</div>
+    <div class="row between"><div><span class="small muted">Recommended ruling</span><div class="num" style="font-size:20px">${label[review.outcome] || review.outcome}${review.refund ? " · " + money(review.refund) : ""}</div></div>
+      ${review.needsHuman ? `<button class="primary" id="d-human">Confirm as human reviewer</button>` : ""}</div>
+    <div id="d-payout"></div>`;
+  const payout = () => {
+    const price = terms.price, refund = Math.min(review.refund || 0, price), seller = price - refund;
+    $("d-payout").innerHTML = `<div class="stack fade"><span class="small muted">Escrow pays out exactly what the ruling says</span>
+      <div class="bar" role="img" aria-label="refund ${money(refund)}, seller ${money(seller)}">${refund ? `<span style="flex:${refund};background:var(--buyer)">buyer ${money(refund)}</span>` : ""}${seller ? `<span style="flex:${seller};background:var(--seller)">seller ${money(seller)}</span>` : ""}</div></div>`;
+  };
+  if (review.needsHuman) $("d-human").onclick = payout; else payout();
+}
+
+// ------------------------------------------------------------- FAIRNESS
+const USER = { product: "macbook-air-m2-16gb", maxPrice: 750, deadline: 4, warrantyValue: 1, minSpecs: { ram_gb: 16, battery_health: 85 }, toughness: 0.5, respectMarket: true };
+const ASSISTANTS = [
+  { name: "Assistant A", model: "large model", args: { product: "macbook-air-m2-16gb", max_price: 750, deadline_days: 4, warranty_value_per_day: 1.0, min_specs: { ram_gb: 16, battery_health: 85 } } },
+  { name: "Assistant B", model: "mid-size model", args: { min_specs: { battery_health: 85, ram_gb: 16 }, warranty_value_per_day: 1, deadline_days: 4, max_price: 750.0, product: "macbook-air-m2-16gb" } },
+  { name: "Assistant C", model: "small open model", args: { product: "macbook-air-m2-16gb", max_price: 750, min_specs: { ram_gb: 16, battery_health: 85 }, deadline_days: 4, warranty_value_per_day: 1, toughness: 0.5, respect_market: true } },
+];
+function runFairness() {
+  const outs = ASSISTANTS.map(a => {
+    const x = a.args;
+    const m = { product: x.product, maxPrice: x.max_price, deadline: x.deadline_days, warrantyValue: x.warranty_value_per_day,
+      minSpecs: x.min_specs, toughness: x.toughness ?? 0.5, respectMarket: x.respect_market ?? true };
+    return runNegotiation(m).best.map(o => [o.listing, o.price, o.warranty, o.delivery]);
+  });
+  const same = new Set(outs.map(o => JSON.stringify(o))).size === 1;
+  $("f-same").innerHTML = same ? `<span class="pill g">identical deals for all three</span>` : `<span class="pill r">results differ</span>`;
+  $("f-asst").innerHTML = ASSISTANTS.map((a, i) => `<div class="asst"><div class="row between"><b>${a.name}</b><span class="small muted">${a.model}</span></div>
+    <pre>set_mandate(${JSON.stringify(a.args, null, 1)})</pre>
+    ${outs[i].map(([l, p, w, d]) => `<div class="dealrow"><span>${l} · ${w ? w + "d warranty" : "no warranty"}</span><span>${money(p)}</span></div>`).join("")}</div>`).join("");
+
+  const L2 = listingById("L2");
+  const skills = [["Assistant A", "large model", 650, 0.85], ["Assistant B", "mid-size model", 680, 0.5], ["Assistant C", "small open model", 720, 0.1]];
+  const withEngine = runNegotiation(USER).best.find(o => o.listing === "L2").price;
+  const rows = skills.map(([n, mdl, op, t]) => ({ n, mdl, without: negotiatePackage({ ...USER, respectMarket: false, toughness: t }, L2, op, L2.warranty[0], L2.delivery[0], null).price, with: withEngine }));
+  const spread = Math.max(...rows.map(r => r.without)) - Math.min(...rows.map(r => r.without));
+  const W = 1060, rowH = 56, top = 34, left = 190, lo = 640, hi = 740, X = v => left + (v - lo) / (hi - lo) * (W - left - 70);
+  const ticks = [640, 660, 680, 700, 720, 740];
+  $("f-head").textContent = `Without a shared engine the price spreads by ${money(spread)}. With it, every assistant gets ${money(withEngine)}.`;
+  $("f-chart").innerHTML = `<div class="tablewrap"><svg viewBox="0 0 ${W} ${top + rows.length * rowH + 30}" width="100%" style="min-width:520px" role="img" aria-label="Without the engine prices spread by ${money(spread)}; with it every assistant gets ${money(withEngine)}">
+    ${ticks.map(t => `<line x1="${X(t)}" x2="${X(t)}" y1="${top}" y2="${top + rows.length * rowH}" stroke="var(--line)"/><text x="${X(t)}" y="${top + rows.length * rowH + 16}" font-size="12" fill="var(--muted)" text-anchor="middle">${money(t)}</text>`).join("")}
+    <line x1="${X(withEngine)}" x2="${X(withEngine)}" y1="${top - 4}" y2="${top + rows.length * rowH}" stroke="var(--good)" stroke-width="2"/>
+    ${rows.map((r, i) => { const y = top + i * rowH + rowH / 2; return `
+      <text x="0" y="${y - 3}" font-size="14" fill="var(--ink)">${r.n}</text><text x="0" y="${y + 14}" font-size="12" fill="var(--muted)">${r.mdl}</text>
+      <line x1="${X(withEngine)}" x2="${X(r.without)}" y1="${y}" y2="${y}" stroke="var(--muted)" stroke-dasharray="3 3"/>
+      <circle cx="${X(r.without)}" cy="${y}" r="6" fill="var(--bad)"/><text x="${r.without < r.with ? X(r.without) - 12 : X(r.without) + 12}" y="${y + 4}" font-size="13" fill="var(--bad)" text-anchor="${r.without < r.with ? "end" : "start"}">${money(r.without)} alone</text>
+      <circle cx="${X(r.with)}" cy="${y}" r="6" fill="var(--good)"/>`; }).join("")}
+    <text x="${X(withEngine) + 8}" y="${top - 10}" font-size="13" fill="var(--good)">shared engine ${money(withEngine)}</text>
+  </svg></div>`;
+}
+
+// ------------------------------------------------------------- start
+syncBuyerOutputs(); syncSellerOutputs(); syncDisputeOutputs();
+runBuyer(); runSeller(); runFairness();
+show();
+renderDispute();
+</script>
+</body>
+</html>
