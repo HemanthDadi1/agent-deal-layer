@@ -1,0 +1,72 @@
+{
+ "v": 4,
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-11-10T09:45:00Z"
+ },
+ "lists": "css",
+ "title": "Tribunal Pitch",
+ "cover": "cover",
+ "order": [
+  "cover",
+  "problem",
+  "trustgap",
+  "whynow",
+  "solution",
+  "insight",
+  "scenarios",
+  "proof",
+  "fairness",
+  "demos",
+  "market",
+  "competition",
+  "moat",
+  "model",
+  "gtm",
+  "roadmap",
+  "risks",
+  "ask",
+  "close"
+ ],
+ "sections": {
+  "s1": {
+   "description": "Who we are in one line",
+   "start": "cover"
+  },
+  "s2": {
+   "description": "Agents can deal, but nobody trusts their deals yet",
+   "start": "problem"
+  },
+  "s3": {
+   "description": "The product: deciding is separated from talking",
+   "start": "solution"
+  },
+  "s4": {
+   "description": "Proof from two working prototypes",
+   "start": "proof"
+  },
+  "s5": {
+   "description": "Market, competition and why we win",
+   "start": "market"
+  },
+  "s6": {
+   "description": "How we make money and get to a pilot",
+   "start": "model"
+  },
+  "s7": {
+   "description": "The ask",
+   "start": "ask"
+  }
+ },
+ "faces": {
+  "ibm-plex-sans": {
+   "family": "IBM Plex Sans",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+  },
+  "ibm-plex-mono": {
+   "family": "IBM Plex Mono",
+   "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
+  }
+ },
+ "designSystems": []
+}

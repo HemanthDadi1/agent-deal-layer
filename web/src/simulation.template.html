@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Deal Market Simulation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a market control room. Controls + clock on top, KPIs, then three live columns
+   (buyers arriving · negotiations in progress · seller board), then money flow and the two charts. */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --soft:#edf0f5; --ink:#131821; --muted:#5a6374; --line:#dce1e9;
+  --buyer:#2453c7; --seller:#ad5f0f; --good:#1d7a4c; --bad:#b42318; --warn:#946200;
+  --a1:#2453c7; --a2:#7c3aed; --a3:#0e7490; --a4:#b45309; --a5:#be185d; --a6:#4b5563;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d1016; --surface:#151922; --soft:#1b2029; --ink:#e5e8ee; --muted:#98a1b2; --line:#283040;
+  --buyer:#7ea3ff; --seller:#f0a45c; --good:#4cc38a; --bad:#ff7b6f; --warn:#e2b340;
+  --a1:#7ea3ff; --a2:#b794f6; --a3:#4fd1e3; --a4:#f6ad55; --a5:#f687b3; --a6:#a0aec0; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0d1016; --surface:#151922; --soft:#1b2029; --ink:#e5e8ee; --muted:#98a1b2; --line:#283040;
+  --buyer:#7ea3ff; --seller:#f0a45c; --good:#4cc38a; --bad:#ff7b6f; --warn:#e2b340;
+  --a1:#7ea3ff; --a2:#b794f6; --a3:#4fd1e3; --a4:#f6ad55; --a5:#f687b3; --a6:#a0aec0; color-scheme:dark;}
+
+*{box-sizing:border-box} [hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--body)}
+.wrap{max-width:1320px;margin:0 auto;padding:0 18px}
+h1,h2,h3{font-family:var(--display);font-weight:600;line-height:1.15;margin:0;text-wrap:balance}
+h1{font-size:26px} h3{font-size:15px}
+p{margin:0}
+.muted{color:var(--muted)} .small{font-size:12.5px}
+.mono,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+header{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+@media (max-width:900px){header{position:static}}
+.top{display:flex;flex-wrap:wrap;gap:10px 24px;justify-content:space-between;align-items:center;padding:12px 0}
+.brand{display:flex;flex-direction:column;gap:2px;max-width:560px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.clock{font:500 18px var(--mono);min-width:150px}
+.clock small{display:block;font:12px var(--body);color:var(--muted)}
+button{font:500 13.5px var(--body);border-radius:7px;padding:7px 12px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+button.primary{background:var(--buyer);border-color:var(--buyer);color:#fff;min-width:84px}
+:root[data-theme="dark"] button.primary{color:#0d1016}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) button.primary{color:#0d1016}}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:7px 10px;font-family:var(--mono)}
+.seg button[aria-pressed="true"]{background:var(--soft);color:var(--buyer)}
+label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted);min-width:150px}
+label .lv{display:flex;justify-content:space-between} label output{font-family:var(--mono);color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--buyer)}
+input[type=number],select{font:13px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 7px}
+.check{flex-direction:row;align-items:center;gap:6px;color:var(--ink);font-size:13px;min-width:0}
+:focus-visible{outline:2px solid var(--buyer);outline-offset:2px}
+
+main{padding:16px 0 40px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
+.pill{display:inline-flex;align-items:center;gap:5px;font:500 11.5px var(--mono);padding:2px 7px;border-radius:99px;border:1px solid var(--line);color:var(--muted);background:var(--soft);white-space:nowrap}
+.pill.g{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,var(--line))}
+.pill.r{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
+.pill.w{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+.pill.b{color:var(--buyer);border-color:color-mix(in srgb,var(--buyer) 40%,var(--line))}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+
+.kpis{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(4,1fr)}}
+@media (max-width:600px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:1px}
+.kpi .num{font-size:21px;font-weight:500}
+.kpi.key{border-color:var(--buyer)}
+
+.live{display:grid;grid-template-columns:300px 1fr 340px;gap:14px;align-items:start}
+@media (max-width:1150px){.live{grid-template-columns:1fr 1fr}.live>.negs{grid-column:1/-1;order:-1}}
+@media (max-width:700px){.live{grid-template-columns:1fr}}
+.list{display:flex;flex-direction:column;gap:6px;max-height:520px;overflow:auto}
+.bitem{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:12.5px}
+.bitem .t{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.negs .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media (max-width:700px){.negs .grid{grid-template-columns:1fr}}
+.neg{border:1px solid var(--line);border-radius:9px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.neg.approved{border-color:var(--good)} .neg.declined,.neg.soldout{border-color:color-mix(in srgb,var(--bad) 50%,var(--line))}
+.neg .who{display:flex;justify-content:space-between;gap:6px;font-size:12.5px}
+.neg .who b{font-weight:600}
+.neg .row{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:12px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{font-weight:500;color:var(--muted);text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:6px 6px;border-bottom:1px solid var(--line)}
+td{padding:7px 6px;border-bottom:1px solid var(--line)}
+td.num,th.num{text-align:right}
+.trust{height:5px;background:var(--soft);border-radius:3px;overflow:hidden;margin-top:3px}
+.trust i{display:block;height:100%;background:var(--good)}
+
+.flow{display:grid;grid-template-columns:1.1fr 1fr;gap:14px;align-items:start}
+@media (max-width:1000px){.flow{grid-template-columns:1fr}}
+.pipe{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+@media (max-width:640px){.pipe{grid-template-columns:repeat(3,1fr)}}
+.stage{border:1px solid var(--line);border-radius:8px;padding:9px;display:flex;flex-direction:column;gap:2px}
+.stage .num{font-size:20px;font-weight:500}
+.stage .bar{height:4px;border-radius:2px;background:var(--soft);overflow:hidden}.stage .bar i{display:block;height:100%}
+.feed{display:flex;flex-direction:column;gap:2px;max-height:300px;overflow:auto;font-size:12.5px}
+.ev{display:grid;grid-template-columns:72px 10px 1fr;gap:8px;align-items:baseline;padding:4px 2px;border-bottom:1px dashed var(--line)}
+.ev .t{font:11px var(--mono);color:var(--muted)}
+.charts{display:grid;grid-template-columns:1.25fr 1fr;gap:14px}
+@media (max-width:1000px){.charts{grid-template-columns:1fr}}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted)}
+svg text{font-family:var(--mono)}
+.note{font-size:12.5px;color:var(--muted)}
+footer{color:var(--muted);font-size:12.5px;padding:0 0 30px}
+@media (prefers-reduced-motion:no-preference){.flash{animation:flash .6s ease-out}@keyframes flash{from{background:color-mix(in srgb,var(--good) 18%,var(--surface))}to{background:transparent}}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap top">
+    <div class="brand">
+      <div style="display:flex;gap:10px;align-items:center"><h1>Agent Deal Market</h1><span class="pill">live simulation · sample data</span></div>
+      <p class="muted small">Buyer agents from different AI assistants arrive, the shared engine negotiates with every matching seller, and money moves through escrow. Every closed price teaches the price guidance.</p>
+    </div>
+    <div class="controls">
+      <div class="clock" id="clock">Day 1 · 00:00<small>simulated time</small></div>
+      <button class="primary" id="play">Pause</button>
+      <button id="step" title="Advance one simulated hour">+1 hour</button>
+      <div class="seg" role="group" aria-label="Speed">
+        <button data-speed="1">1×</button><button data-speed="4" aria-pressed="true">4×</button><button data-speed="12">12×</button><button data-speed="40">40×</button>
+      </div>
+      <label for="rate"><span class="lv">Buyers per day <output id="o-rate"></output></span><input type="range" id="rate" min="10" max="120" step="2" value="48"></label>
+      <label for="risk"><span class="lv">Defect risk <output id="o-risk"></output></span><input type="range" id="risk" min="0" max="3" step="0.25" value="1"></label>
+      <label class="check" for="market"><input type="checkbox" id="market" checked> Cap at market walk-away</label>
+      <label for="seed" style="min-width:90px">Seed<input type="number" id="seed" value="7" min="1" max="9999"></label>
+      <label for="days" style="min-width:110px">Run for<select id="days"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option><option value="0">No limit</option></select></label>
+      <button id="reset">Restart</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card" id="summary" hidden style="border-color:var(--good)"></section>
+  <section class="kpis" id="kpis" aria-label="Market totals"></section>
+
+  <section class="live">
+    <div class="card">
+      <div class="head"><h3>Buyers arriving</h3><span class="small muted">private mandates</span></div>
+      <div class="list" id="buyers"></div>
+    </div>
+    <div class="card negs">
+      <div class="head"><h3>Negotiations in progress</h3>
+        <div class="legend"><span><i class="dot" style="background:var(--seller)"></i> seller asks</span><span><i class="dot" style="background:var(--buyer)"></i> buyer bids</span><span><i class="dot" style="background:var(--good)"></i> deal</span></div></div>
+      <div class="grid" id="negs"></div>
+    </div>
+    <div class="card">
+      <div class="head"><h3>Seller board</h3><span class="small muted">floors stay private</span></div>
+      <div style="overflow-x:auto"><table id="sellers"></table></div>
+    </div>
+  </section>
+
+  <section class="flow">
+    <div class="card">
+      <div class="head"><h3>Money in escrow</h3><span class="small muted">paid out only after inspection or a ruling</span></div>
+      <div class="pipe" id="pipe"></div>
+      <p class="note" style="margin-top:10px" id="pipenote"></p>
+    </div>
+    <div class="card">
+      <div class="head"><h3>Market events</h3><span class="small muted" id="evcount"></span></div>
+      <div class="feed" id="feed" aria-live="off"></div>
+    </div>
+  </section>
+
+  <section class="charts">
+    <div class="card">
+      <div class="head"><h3 id="pc-title">Price discovery</h3>
+        <select id="pc-product" aria-label="Product for the price chart">
+          <option value="macbook-air-m2-16gb">MacBook Air M2 (16GB)</option>
+          <option value="dell-xps-13-16gb">Dell XPS 13 (16GB)</option>
+          <option value="monitor-27-4k">27-inch 4K monitor</option>
+        </select></div>
+      <div id="pc"></div>
+      <div class="legend" id="pc-legend"></div>
+    </div>
+    <div class="card">
+      <div class="head"><h3>What each assistant's users would overpay alone</h3></div>
+      <div id="fc"></div>
+      <p class="note">For every closed deal, the simulation also replays the same buyer against the same listing with the assistant bargaining on its own (weaker models open higher and concede faster). With the shared engine, the assistant has no effect on the price.</p>
+    </div>
+  </section>
+</main>
+<footer class="wrap">Sample data: 8 simulated sellers, 3 products, assistant skill levels and defect rates are assumptions. The negotiation engine, hard caps and dispute rules are the same code as the Agent Deal Layer MCP server.</footer>
+
+<script>
+/*__ENGINE__*/
+/*__SIM__*/
+
+const $ = id => document.getElementById(id);
+const money = x => "$" + Math.round(x).toLocaleString("en-US");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ACOLOR = { chatgpt: "var(--a1)", claude: "var(--a2)", gemini: "var(--a3)", grok: "var(--a4)", deepseek: "var(--a5)", small: "var(--a6)" };
+const clockText = t => { const d = Math.floor(t / TICKS_PER_DAY) + 1, m = (t % TICKS_PER_DAY) * 10; return `Day ${d} · ${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+const ago = t => { const m = (S.t - t) * 10; return m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`; };
+
+let S, speed = 4, running = true, timer = null, frame = 0;
+const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function start() {
+  $("summary").hidden = true; running = !reduce; $("play").textContent = running ? "Pause" : "Play";
+  S = createSim({ seed: +$("seed").value || 7, rate: +$("rate").value, risk: +$("risk").value, respectMarket: $("market").checked });
+  for (let i = 0; i < Math.round(TICKS_PER_DAY * 1.5); i++) S.tick();   // warm up 1.5 days so the board is full
+  renderAll();
+}
+const limitTicks = () => +$("days").value * TICKS_PER_DAY;
+function loop() {
+  if (running && !document.hidden) {
+    for (let i = 0; i < speed; i++) { if (limitTicks() && S.t >= limitTicks()) break; S.tick(); }
+    frame++; renderAll();
+    if (limitTicks() && S.t >= limitTicks()) finish();
+  }
+  timer = setTimeout(loop, 160);
+}
+function finish() {
+  running = false; $("play").textContent = "Play";
+  const k = S.k, days = Math.round(S.t / TICKS_PER_DAY);
+  const saved = Object.values(S.fair).reduce((a, f) => a + (f.alone - f.eng), 0);
+  $("summary").hidden = false;
+  $("summary").innerHTML = `<div class="head"><h3>Run complete: ${days} simulated days</h3><span class="pill g">paused</span></div>
+    <p>${k.arrived.toLocaleString()} buyer agents, ${k.approved.toLocaleString()} deals, ${money(k.gmv)} in sales and ${money(k.revenue)} platform revenue.
+    Dispute rate ${k.delivered ? (100 * k.disputes / k.delivered).toFixed(1) : "0.0"}%. Budgets and floors crossed: ${k.capViolations}.
+    The shared engine saved buyers ${money(saved)} compared with each assistant bargaining alone.</p>
+    <p class="small muted" style="margin-top:6px">Press Play to keep going past the limit, or Restart with a new seed.</p>`;
+}
+
+// ---------------------------------------------------------------- controls
+$("play").onclick = () => {
+  if (!running && limitTicks() && S.t >= limitTicks()) $("days").value = "0";   // continue past the limit
+  running = !running; $("play").textContent = running ? "Pause" : "Play";
+};
+$("step").onclick = () => { for (let i = 0; i < 6; i++) S.tick(); renderAll(); };
+document.querySelectorAll("[data-speed]").forEach(b => b.onclick = () => {
+  speed = +b.dataset.speed; document.querySelectorAll("[data-speed]").forEach(x => x.setAttribute("aria-pressed", x === b));
+});
+const syncOut = () => { $("o-rate").textContent = $("rate").value; $("o-risk").textContent = (+$("risk").value).toFixed(2) + "×"; };
+$("rate").oninput = () => { syncOut(); S.rate = +$("rate").value; };
+$("risk").oninput = () => { syncOut(); S.risk = +$("risk").value; };
+$("market").onchange = () => { S.respectMarket = $("market").checked; };
+$("reset").onclick = start;
+$("pc-product").onchange = () => renderPriceChart();
+
+// ---------------------------------------------------------------- render
+function renderAll() {
+  $("clock").innerHTML = `${clockText(S.t)}<small>simulated time · ${speed}× </small>`;
+  renderKpis(); renderBuyers(); renderNegs(); renderSellers(); renderPipe(); renderFeed();
+  if (frame % 2 === 0) { renderPriceChart(); renderFair(); }
+}
+
+function renderKpis() {
+  const k = S.k, decided = k.approved + k.declined;
+  const fairAll = Object.values(S.fair).reduce((a, f) => ({ n: a.n + f.n, d: a.d + (f.alone - f.eng) }), { n: 0, d: 0 });
+  const tile = (label, val, note, key) => `<div class="kpi${key ? " key" : ""}"><span class="small muted">${label}</span><span class="num">${val}</span><span class="small muted">${note}</span></div>`;
+  $("kpis").innerHTML =
+    tile("Buyer agents", k.arrived.toLocaleString(), `${k.matched ? Math.round(100 * k.matched / k.arrived) : 0}% found a match`) +
+    tile("Deals closed", k.approved.toLocaleString(), `${decided ? Math.round(100 * k.approved / decided) : 0}% approved by shoppers`) +
+    tile("Gross sales", money(k.gmv), "through escrow") +
+    tile("Platform revenue", money(k.revenue), "3.5% + $5 per deal", true) +
+    tile("Saved vs list", money(k.approved ? k.saved / k.approved : 0), "per deal, average") +
+    tile("Dispute rate", `${k.delivered ? (100 * k.disputes / k.delivered).toFixed(1) : "0.0"}%`, `${k.refunds} refunded · ${k.rejected} rejected`) +
+    tile("Limits crossed", String(k.capViolations), k.capViolations ? "investigate" : "budgets and floors held", !k.capViolations && false);
+}
+
+function renderBuyers() {
+  $("buyers").innerHTML = S.buyers.slice(0, 14).map(b => {
+    const st = { negotiating: ["b", `round ${b.round}/${b.neg ? b.neg.rounds.length - 1 : 0}`], awaiting: ["w", "asking shopper"],
+      approved: ["g", "bought"], declined: ["r", "declined"], nodeal: ["", "no deal"], soldout: ["r", "sold out"] }[b.state];
+    const spec = b.m.minSpecs.battery_health ? `bat ≥${b.m.minSpecs.battery_health}%` : "any battery";
+    return `<div class="bitem"><i class="dot" style="background:${ACOLOR[b.asst.key]}"></i>
+      <div><div><b>#${b.id}</b> ${esc(b.asst.name)}</div><div class="small muted">${esc(SEED.products[b.product].title)} · ${b.product === "monitor-27-4k" ? "" : spec + " · "}${b.m.deadline}d${b.m.warrantyValue ? ` · warranty $${b.m.warrantyValue}/d` : ""}</div></div>
+      <div style="text-align:right"><span class="pill ${st[0]}">${st[1]}</span><div class="t">${ago(b.t0)}</div></div></div>`;
+  }).join("");
+}
+
+function negChart(b, w = 250, h = 70) {
+  const o = b.neg, upto = b.state === "negotiating" ? b.round : o.rounds.length - 1;
+  const R = o.rounds.slice(0, upto + 1);
+  const all = o.rounds.flatMap(r => [r.ask, r.bid]);
+  const lo = Math.min(...all) - 8, hi = Math.max(...all) + 8, pad = 4;
+  const X = k => pad + k / 10 * (w - 2 * pad - 40), Y = v => pad + (hi - v) / (hi - lo) * (h - 2 * pad);
+  const pl = (key, c) => R.length ? `<polyline fill="none" stroke="${c}" stroke-width="2" points="${R.map(r => X(r.k).toFixed(1) + "," + Y(r[key]).toFixed(1)).join(" ")}"/>` : "";
+  const last = R.at(-1);
+  const end = b.state !== "negotiating"
+    ? `<circle cx="${X(last.k)}" cy="${Y(o.price)}" r="4" fill="var(--good)"/><text x="${X(last.k) + 7}" y="${Y(o.price) + 4}" font-size="11" fill="var(--ink)">${money(o.price)}</text>`
+    : `<text x="${X(last.k) + 6}" y="${Y(last.ask) + 4}" font-size="10" fill="var(--seller)">${money(last.ask)}</text><text x="${X(last.k) + 6}" y="${Y(last.bid) + 4}" font-size="10" fill="var(--buyer)">${money(last.bid)}</text>`;
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" role="img" aria-label="negotiation rounds">${pl("ask", "var(--seller)")}${pl("bid", "var(--buyer)")}${end}</svg>`;
+}
+
+function renderNegs() {
+  const show = S.buyers.filter(b => b.neg && (b.state === "negotiating" || b.state === "awaiting" || S.t - (b.done ?? S.t) < 30)).slice(0, 6);
+  if (!show.length) { $("negs").innerHTML = `<p class="muted small">Waiting for the next buyer…</p>`; return; }
+  $("negs").innerHTML = show.map(b => {
+    const l = b.listing, seller = S.sellerOf(l.seller), o = b.neg;
+    const status = { negotiating: `<span class="pill b">round ${b.round} of ${o.rounds.length - 1}</span>`, awaiting: `<span class="pill w">waiting for shopper</span>`,
+      approved: `<span class="pill g">deal ${money(o.price)}</span>`, declined: `<span class="pill r">shopper declined</span>`, soldout: `<span class="pill r">sold out</span>` }[b.state];
+    return `<div class="neg ${b.state}">
+      <div class="who"><span><i class="dot" style="background:${ACOLOR[b.asst.key]}"></i> <b>#${b.id}</b> ${esc(b.asst.name)} → ${esc(seller.name)}</span><span class="mono small muted">${l.id}</span></div>
+      ${negChart(b)}
+      <div class="row"><span class="muted">${b.contacted} contacted · ${o.warranty ? o.warranty + "d warranty" : "no warranty"} · ${o.delivery}d ship</span>${status}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderSellers() {
+  $("sellers").innerHTML = `<thead><tr><th>Seller</th><th class="num">Stock</th><th class="num">Sold</th><th class="num">Margin</th><th>Trust</th></tr></thead><tbody>` +
+    S.sellers.map(s => {
+      const trust = Math.max(0, 1 - (s.disputes + 0.5) / (s.sales + 10));
+      return `<tr><td><div>${esc(s.name)}</div><div class="small">${s.verified ? `<span class="pill g">verified</span>` : `<span class="pill w">unverified</span>`}</div></td>
+      <td class="num">${S.stockOf(s)}</td><td class="num">${s.sales}</td><td class="num">${s.sales ? money(s.margin / s.sales) : "—"}</td>
+      <td style="min-width:70px"><span class="mono small">${Math.round(trust * 100)}%</span><div class="trust"><i style="width:${trust * 100}%;background:${trust > 0.9 ? "var(--good)" : trust > 0.8 ? "var(--warn)" : "var(--bad)"}"></i></div></td></tr>`;
+    }).join("") + `</tbody>`;
+}
+
+function renderPipe() {
+  const c = { funded: 0, inspecting: 0, review: 0, released: 0, resolved: 0 }, m = { funded: 0, inspecting: 0, review: 0 };
+  let refunded = 0;
+  for (const d of S.deals) { c[d.stage]++; if (m[d.stage] != null) m[d.stage] += d.price; if (d.stage === "resolved") refunded += d.refund; }
+  const total = S.deals.length || 1;
+  const st = (label, n, note, color) => `<div class="stage"><span class="small muted">${label}</span><span class="num">${n}</span><div class="bar"><i style="width:${100 * n / total}%;background:${color}"></i></div><span class="small muted">${note}</span></div>`;
+  $("pipe").innerHTML =
+    st("In transit", c.funded, money(m.funded) + " held", "var(--buyer)") +
+    st("Inspecting", c.inspecting, money(m.inspecting) + " held", "var(--buyer)") +
+    st("Human review", c.review, money(m.review) + " held", "var(--warn)") +
+    st("Released", c.released, "paid to sellers", "var(--good)") +
+    st("Settled disputes", c.resolved, money(refunded) + " refunded", "var(--bad)") +
+    st("Total deals", S.deals.length, "since day 1", "var(--muted)");
+  const held = m.funded + m.inspecting + m.review;
+  $("pipenote").textContent = `${money(held)} is held in escrow right now. Disputes on deals over $200, or with a split vote, wait for a human reviewer.`;
+}
+
+function renderFeed() {
+  const color = { arrive: "var(--buyer)", deal: "var(--good)", decline: "var(--bad)", nodeal: "var(--muted)", dispute: "var(--warn)", resolve: "var(--warn)", release: "var(--good)", restock: "var(--seller)" };
+  $("evcount").textContent = `latest ${Math.min(S.events.length, 40)}`;
+  $("feed").innerHTML = S.events.slice(0, 40).map(e => `<div class="ev"><span class="t">${clockText(e.t).replace("Day ", "D").replace(" · ", " ")}</span><i class="dot" style="background:${color[e.kind]};margin-top:5px"></i><span>${esc(e.text)}</span></div>`).join("");
+}
+
+function renderPriceChart() {
+  const p = $("pc-product").value, W = 640, H = 250, L = 46, R = 12, T = 14, B = 26;
+  const band = S.bands[p] || [], pts = S.prices.filter(x => x.product === p);
+  const t1 = Math.max(S.t, 1), t0 = Math.max(0, t1 - TICKS_PER_DAY * 7);
+  const vis = pts.filter(x => x.t >= t0), bv = band.filter(x => x.t >= t0);
+  const vals = [...vis.map(x => x.price), ...bv.flatMap(x => [x.lo, x.hi])];
+  if (!vals.length) { $("pc").innerHTML = `<p class="muted small">No closed deals yet for this product.</p>`; return; }
+  let lo = Math.min(...vals), hi = Math.max(...vals); const padv = (hi - lo) * 0.1 + 5; lo -= padv; hi += padv;
+  const X = t => L + (t - t0) / Math.max(1, t1 - t0) * (W - L - R), Y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const step = Math.max(5, Math.round((hi - lo) / 5 / 5) * 5), ticks = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) ticks.push(v);
+  const days = []; for (let d = Math.ceil(t0 / TICKS_PER_DAY); d * TICKS_PER_DAY <= t1; d++) days.push(d);
+  const area = bv.length > 1 ? `<path d="M${bv.map(b => X(b.t).toFixed(1) + "," + Y(b.hi).toFixed(1)).join("L")}L${[...bv].reverse().map(b => X(b.t).toFixed(1) + "," + Y(b.lo).toFixed(1)).join("L")}Z" fill="var(--buyer)" opacity=".13"/>
+    <polyline fill="none" stroke="var(--buyer)" stroke-width="1.5" points="${bv.map(b => X(b.t).toFixed(1) + "," + Y(b.med).toFixed(1)).join(" ")}"/>` : "";
+  const valueLine = `<line x1="${L}" x2="${W - R}" y1="${Y(S.value[p])}" y2="${Y(S.value[p])}" stroke="var(--muted)" stroke-dasharray="4 4"/>`;
+  const dots = vis.map(x => `<circle cx="${X(x.t).toFixed(1)}" cy="${Y(x.price).toFixed(1)}" r="3" fill="${ACOLOR[x.asst]}" opacity=".85"/>`).join("");
+  const lastB = bv.at(-1);
+  $("pc-title").textContent = `Price discovery: ${vis.length} deals in the last ${Math.min(7, Math.ceil((t1 - t0) / TICKS_PER_DAY))} days`;
+  $("pc").innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Closed deal prices over time with the learned fair range">
+    ${ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${Y(v) + 4}" font-size="10.5" fill="var(--muted)" text-anchor="end">${money(v)}</text>`).join("")}
+    ${days.map(d => `<text x="${X(d * TICKS_PER_DAY)}" y="${H - 8}" font-size="10.5" fill="var(--muted)" text-anchor="middle">day ${d + 1}</text>`).join("")}
+    ${area}${valueLine}${dots}
+    ${lastB ? `<text x="${W - R}" y="${Y(lastB.hi) - 6}" font-size="10.5" fill="var(--buyer)" text-anchor="end">fair range ${money(lastB.lo)}–${money(lastB.hi)}</text>` : ""}
+  </svg>`;
+  $("pc-legend").innerHTML = `<span><i class="dot" style="background:var(--buyer);opacity:.4"></i> fair range learned from the last 30 deals</span><span><i class="dot" style="background:var(--buyer)"></i> median</span><span>- - - hidden true market value</span>` +
+    ASSISTANTS.map(a => `<span><i class="dot" style="background:${ACOLOR[a.key]}"></i> ${esc(a.name)}</span>`).join("");
+}
+
+function renderFair() {
+  const rows = ASSISTANTS.map(a => { const f = S.fair[a.key]; return { a, n: f.n, over: f.n ? (f.alone - f.eng) / f.n : 0, eng: f.n ? f.engRatio / f.n : 1, alone: f.n ? f.aloneRatio / f.n : 1 }; });
+  const max = Math.max(12, ...rows.map(r => r.over)), W = 520, rowH = 34, L = 150, T = 8;
+  const X = v => L + Math.max(0, v) / max * (W - L - 70);
+  const total = rows.reduce((s, r) => s + r.over * r.n, 0);
+  $("fc").innerHTML = `<p style="font-weight:500;margin-bottom:6px">Users of weaker assistants would pay the most more alone. Across all deals so far, the shared engine has saved buyers ${money(total)}.</p>
+  <svg viewBox="0 0 ${W} ${T + rows.length * rowH + 4}" width="100%" role="img" aria-label="Average overpay per deal without the shared engine, by assistant">
+    ${rows.map((r, i) => { const y = T + i * rowH; return `
+      <text x="0" y="${y + 15}" font-size="12" fill="var(--ink)">${esc(r.a.name)}</text><text x="0" y="${y + 28}" font-size="10" fill="var(--muted)">${esc(r.a.size)} · ${r.n} deals</text>
+      <rect x="${L}" y="${y + 6}" width="${Math.max(1, X(r.over) - L)}" height="16" rx="3" fill="${ACOLOR[r.a.key]}" opacity=".85"/>
+      <text x="${X(r.over) + 6}" y="${y + 18}" font-size="12" fill="var(--ink)">+${money(r.over)}</text>`; }).join("")}
+  </svg>
+  <p class="small muted" style="margin-top:4px">With the engine, every assistant paid on average ${(100 * rows.reduce((s, r) => s + r.eng * r.n, 0) / Math.max(1, rows.reduce((s, r) => s + r.n, 0))).toFixed(1)}% of the market median.</p>`;
+}
+
+syncOut();
+start();
+loop();
+</script>
+</body>
+</html>

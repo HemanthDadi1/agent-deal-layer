@@ -1,0 +1,77 @@
+{
+  "_note": "SAMPLE DATA for the proof of concept. Prices and comps are illustrative, not real market data.",
+  "products": {
+    "macbook-air-m2-16gb": {
+      "title": "MacBook Air M2 (16GB RAM)",
+      "category": "laptop",
+      "launch_price": 1399,
+      "recent_closed_prices": [640, 655, 662, 670, 678, 685, 690, 702, 710, 720],
+      "checklist": [
+        "Battery cycle count and battery health % (System Settings > Battery)",
+        "Activation Lock / Find My is OFF (otherwise the laptop is unusable)",
+        "Keyboard, trackpad and screen: no dead keys, pressure marks or dead pixels",
+        "Charger included and original (30W or 35W)",
+        "Serial number matches the listing and is not reported stolen"
+      ]
+    },
+    "dell-xps-13-16gb": {
+      "title": "Dell XPS 13 (16GB RAM)",
+      "category": "laptop",
+      "launch_price": 1299,
+      "recent_closed_prices": [480, 495, 505, 515, 520, 530, 545, 560],
+      "checklist": [
+        "Battery health via Dell Power Manager",
+        "BIOS password removed",
+        "Windows license activated",
+        "Hinge and screen condition"
+      ]
+    },
+    "monitor-27-4k": {
+      "title": "27-inch 4K monitor",
+      "category": "monitor",
+      "launch_price": 399,
+      "recent_closed_prices": [205, 212, 219, 225, 229, 234, 240, 249],
+      "checklist": [
+        "Dead or stuck pixels",
+        "Backlight bleed in a dark room",
+        "Stand and all cables included"
+      ]
+    }
+  },
+  "sellers": {
+    "S1": {"name": "Marcus Refurb Co.", "toughness": 0.6, "verified": true},
+    "S2": {"name": "BayTech Resale", "toughness": 0.4, "verified": true},
+    "S3": {"name": "Campus Gadgets", "toughness": 0.7, "verified": true},
+    "S4": {"name": "QuickFlip Electronics", "toughness": 0.5, "verified": false}
+  },
+  "listings": [
+    {"id": "L1", "seller_id": "S1", "product": "macbook-air-m2-16gb", "list_price": 749, "floor_price": 655,
+     "specs": {"ram_gb": 16, "storage_gb": 512, "battery_health": 88, "condition": "A"},
+     "warranty_options": [{"days": 0, "cost_per_day": 0}, {"days": 30, "cost_per_day": 0.35}, {"days": 90, "cost_per_day": 0.3}],
+     "delivery_options": [{"days": 5, "cost": 0}, {"days": 2, "cost": 15}]},
+    {"id": "L2", "seller_id": "S2", "product": "macbook-air-m2-16gb", "list_price": 729, "floor_price": 660,
+     "specs": {"ram_gb": 16, "storage_gb": 256, "battery_health": 91, "condition": "A"},
+     "warranty_options": [{"days": 0, "cost_per_day": 0}],
+     "delivery_options": [{"days": 3, "cost": 0}]},
+    {"id": "L3", "seller_id": "S3", "product": "macbook-air-m2-16gb", "list_price": 799, "floor_price": 690,
+     "specs": {"ram_gb": 16, "storage_gb": 512, "battery_health": 95, "condition": "A"},
+     "warranty_options": [{"days": 0, "cost_per_day": 0}, {"days": 60, "cost_per_day": 0.25}],
+     "delivery_options": [{"days": 4, "cost": 0}, {"days": 1, "cost": 25}]},
+    {"id": "L4", "seller_id": "S4", "product": "macbook-air-m2-16gb", "list_price": 690, "floor_price": 610,
+     "specs": {"ram_gb": 16, "storage_gb": 256, "battery_health": 82, "condition": "B"},
+     "warranty_options": [{"days": 0, "cost_per_day": 0}],
+     "delivery_options": [{"days": 6, "cost": 0}]},
+    {"id": "L5", "seller_id": "S1", "product": "macbook-air-m2-16gb", "list_price": 769, "floor_price": 700,
+     "specs": {"ram_gb": 16, "storage_gb": 1024, "battery_health": 90, "condition": "A"},
+     "warranty_options": [{"days": 0, "cost_per_day": 0}, {"days": 30, "cost_per_day": 0.35}],
+     "delivery_options": [{"days": 7, "cost": 0}]},
+    {"id": "L6", "seller_id": "S2", "product": "dell-xps-13-16gb", "list_price": 579, "floor_price": 505,
+     "specs": {"ram_gb": 16, "storage_gb": 512, "battery_health": 86, "condition": "A"},
+     "warranty_options": [{"days": 0, "cost_per_day": 0}, {"days": 30, "cost_per_day": 0.3}],
+     "delivery_options": [{"days": 3, "cost": 0}]},
+    {"id": "L7", "seller_id": "S1", "product": "monitor-27-4k", "list_price": 259, "floor_price": 214,
+     "specs": {"condition": "A", "quantity_available": 60},
+     "warranty_options": [{"days": 0, "cost_per_day": 0}, {"days": 90, "cost_per_day": 0.08}],
+     "delivery_options": [{"days": 5, "cost": 0}]}
+  ]
+}
