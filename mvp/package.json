@@ -1,0 +1,24 @@
+{
+  "name": "agent-deal-layer",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "mcp": "tsx src/mcp-stdio.ts",
+    "demo": "tsx src/demo.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "*",
+    "fastify": "*",
+    "zod": "*"
+  },
+  "devDependencies": {
+    "@types/node": "*",
+    "tsx": "*",
+    "typescript": "*",
+    "vitest": "*"
+  }
+}

@@ -59,3 +59,7 @@ To connect the MCP server to Claude Desktop or ChatGPT, see [`poc/README.md`](po
 - The engine still concedes all the way to each limit by the last round. Tribunal's stop-short margin and blind mediator should be ported in.
 - No licence has been chosen yet.
 
+
+## MVP build (`mvp/`)
+
+A working TypeScript implementation of the MVP scope: shared negotiation engine, vendor and buyer flows, escrow state machine, disputes, MCP connector, hosted approval page and admin panel. See [`mvp/README.md`](mvp/README.md) for setup, scope status and known gaps (escrow partner, OAuth 2.1, Postgres).
