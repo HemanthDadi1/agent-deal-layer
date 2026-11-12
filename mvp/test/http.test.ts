@@ -115,5 +115,7 @@ describe("REST + MCP + hosted pages end to end", () => {
     const dash = await app.inject({ method: "GET", url: "/vendor", headers: { cookie } });
     expect(dash.body).toContain("Lead list");
     expect(dash.body).not.toContain("<script");
+    // Red action buttons keep readable white text.
+    expect((await app.inject({ method: "GET", url: "/admin" })).body).toContain("button.bad{background:var(--bad);color:#fff}");
   });
 });

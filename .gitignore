@@ -5,3 +5,7 @@ __pycache__/
 venv/
 .DS_Store
 web/dist/
+node_modules/
+*.db
+*.db-shm
+*.db-wal

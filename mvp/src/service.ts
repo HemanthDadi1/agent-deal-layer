@@ -137,7 +137,7 @@ export class Platform {
     const specs: string[] = [];
     for (const m of text.matchAll(/\b(\d{1,2}\s?GB|\d{3,4}\s?GB|\d(?:\.\d)?\s?TB|M[1-4](?: Pro| Max)?|i[3579]-?\d{0,5}|\d{1,2}["”]|OLED|5G)\b/gi))
       specs.push(m[1].replace(/\s+/g, "").toUpperCase());
-    const title = raw.title.trim().replace(/\s+/g, " ").replace(/\b([a-z])/g, (c) => c.toUpperCase());
+    const title = raw.title.trim().replace(/\s+/g, " ").replace(/\b[a-z]+\b/g, (w) => w[0].toUpperCase() + w.slice(1)); // all-lowercase words only: "iPhone" stays
     return { title, specs: [...new Set(specs)] };
   }
 
@@ -263,6 +263,7 @@ export class Platform {
   // ---------- mandate -> matching -> quotes ----------
   async createMandate(clientId: string, m: {
     query: string; category?: string; mustHaves?: string[]; budget: number; deadlineDays?: number; warrantyValuePerDay?: number;
+    onlyItemId?: string; // the buyer picked one listing: negotiate with that seller only
   }) {
     const q = screen(m.query);
     const must = (m.mustHaves ?? []).map((s) => screen(s));
@@ -279,7 +280,7 @@ export class Platform {
       JSON.stringify(must.map((x) => x.clean).filter(Boolean)), m.budget, m.deadlineDays ?? null, m.warrantyValuePerDay ?? 0, this.now());
     this.logDecision("client", clientId, id, "mandate", m.budget, { query: q.clean });
     this.audit(clientId, "mandate.created", id);
-    this.runMatching(id);
+    this.runMatching(id, m.onlyItemId);
     return { mandateId: id };
   }
 
@@ -287,13 +288,15 @@ export class Platform {
     return s.toLowerCase().split(/[^a-z0-9"+.-]+/).filter((t) => t.length > 1);
   }
 
-  runMatching(mandateId: string) {
+  /** onlyItemId: match one new item against an existing mandate (a buyer who is still watching). */
+  runMatching(mandateId: string, onlyItemId?: string) {
     const m = this.get("SELECT * FROM mandates WHERE id=?", mandateId)!;
     const must: string[] = JSON.parse(m.must_haves);
     const queryTokens = this.tokens(m.query);
     const items = this.all(`SELECT i.*, v.status vstatus, v.auto_approve_under, v.confirm_channel, v.email vemail, v.phone vphone, v.name vname
        FROM items i JOIN vendors v ON v.id=i.vendor_id
-       WHERE v.status='approved' AND i.status='live' AND i.stock>0 ${m.category ? "AND i.category=?" : ""}`, ...(m.category ? [m.category] : []));
+       WHERE v.status='approved' AND i.status='live' AND i.stock>0 ${m.category ? "AND i.category=?" : ""} ${onlyItemId ? "AND i.id=?" : ""}`,
+      ...(m.category ? [m.category] : []), ...(onlyItemId ? [onlyItemId] : []));
     for (const it of items) {
       const hay = this.tokens(`${it.title} ${JSON.parse(it.specs).join(" ")} ${it.category} ${it.condition}`);
       const hits = queryTokens.filter((t) => hay.some((h) => h.includes(t))).length;
@@ -526,12 +529,15 @@ export class Platform {
     const d = this.get("SELECT * FROM deals WHERE id=? AND client_id=?", dealId, clientId);
     if (!d) throw notFound("deal not found");
     const r = screen(reason);
-    if (!r.ok) { this.audit(clientId, "safety.blocked", "dispute", { flags: r.flags }); throw bad("dispute text rejected by safety filter"); }
     if (!r.clean) throw bad("reason required");
     if (!["paid_held", "shipped", "delivered"].includes(d.status)) throw bad(`deal is ${d.status}: cannot dispute`);
     if (d.delivered_at && this.now() > d.delivered_at + DISPUTE_WINDOW) throw bad("dispute window (3 days after delivery) has passed");
     const id = newId("dis");
-    this.run("INSERT INTO disputes(id,deal_id,reason,created_at) VALUES(?,?,?,?)", id, dealId, r.clean, this.now());
+    // A complaint is never refused for its wording ("urgent, send my money back" is normal here):
+    // it is opened, and the admin sees what the filter flagged.
+    if (!r.ok) this.audit(clientId, "safety.flagged", id, { flags: r.flags, dealId });
+    const text = r.ok ? r.clean : `[flagged: ${r.flags.join(", ")}] ${r.clean}`;
+    this.run("INSERT INTO disputes(id,deal_id,reason,created_at) VALUES(?,?,?,?)", id, dealId, text, this.now());
     this.run("UPDATE deals SET status='disputed' WHERE id=?", dealId); // money stays held
     this.audit(clientId, "dispute.opened", id, { dealId });
     return { disputeId: id, status: "open", moneyStatus: "held" };
@@ -584,7 +590,8 @@ export class Platform {
 
   // ---------- CRM, analytics, pricing ----------
   leads(vendorId: string) {
-    return this.all(`SELECT l.created_at, l.outcome, l.reason, i.title, m.query, m.budget, q.price
+    // Never the buyer's budget: it is their private limit, like the vendor's floor is to the buyer.
+    return this.all(`SELECT l.created_at, l.outcome, l.reason, i.title, m.query, q.price
       FROM leads l JOIN items i ON i.id=l.item_id JOIN mandates m ON m.id=l.mandate_id LEFT JOIN quotes q ON q.id=l.quote_id
       WHERE l.vendor_id=? ORDER BY l.created_at DESC`, vendorId);
   }

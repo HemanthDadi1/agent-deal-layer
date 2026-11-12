@@ -52,4 +52,21 @@ describe("engine", () => {
     }
     expect(atMin).toBeLessThan(15);
   });
+
+  it("a vendor accept never asks more than the buyer offered or the vendor last said", () => {
+    let checked = 0;
+    for (let s = 1; s < 3000; s++) {
+      const list = 12_000 + (s % 150) * 1000, floor = Math.round(list * (0.6 + (s % 30) / 100));
+      const vt: VendorTerms = { list, floor, target: list, maxDiscountPct: 50, warrantyOptions: [0, 30], warrantyCostPerDay: s % 3, leadDays: 2 };
+      const r = negotiate(vt, { budget: Math.round(list * (0.7 + (s % 40) / 100)), warrantyValuePerDay: s % 5 }, s);
+      const acc = r.turns.at(-1);
+      if (!r.agreed || acc?.side !== "vendor") continue;
+      checked++;
+      const before = r.turns.slice(0, -1).reverse();
+      expect(acc.price).toBeLessThanOrEqual(before.find((t) => t.side === "buyer")!.price);
+      expect(acc.price).toBeLessThanOrEqual(before.find((t) => t.side === "vendor")!.price);
+      expect(acc.price).toBeGreaterThanOrEqual(floor);
+    }
+    expect(checked).toBeGreaterThan(500);
+  });
 });

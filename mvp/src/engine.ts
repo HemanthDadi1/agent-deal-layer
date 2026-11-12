@@ -85,7 +85,8 @@ export function negotiate(v: VendorTerms, b: BuyerTerms, seed: number, rounds = 
   const ask = (r: number) => Math.max(low, Math.round(v.list - (v.list - low) * Math.pow(r / rounds, 1.4)));
   const bid = (r: number) => Math.min(buyerCeiling, Math.round(open + (buyerCeiling - open) * Math.pow(r / rounds, 1.4)));
 
-  turns.push({ seq: seq++, side: "vendor", kind: "offer", price: roundStep(Math.max(v.list, low)), warrantyDays });
+  let said = roundStep(Math.max(v.list, low)); // the vendor's last stated price
+  turns.push({ seq: seq++, side: "vendor", kind: "offer", price: said, warrantyDays });
   for (let r = 1; r <= rounds; r++) {
     const o = bid(r);
     assertBuyerOffer(b, o);
@@ -93,8 +94,9 @@ export function negotiate(v: VendorTerms, b: BuyerTerms, seed: number, rounds = 
     const a = ask(r);
     assertVendorOffer(v, a);
     if (o >= a) {
-      // Crossed: settle at the midpoint, which lies between the vendor's ask and the buyer's offer.
-      let price = Math.min(roundStep((o + a) / 2), buyerCeiling);
+      // Crossed: the vendor takes the buyer's offer, never more than it last asked and never below its own low.
+      // (Settling at a midpoint of the unstated ask could undercut the price it had just said.)
+      let price = Math.min(o, said);
       price = Math.max(price, low);
       assertVendorOffer(v, price);
       assertBuyerOffer(b, price);
@@ -102,6 +104,7 @@ export function negotiate(v: VendorTerms, b: BuyerTerms, seed: number, rounds = 
       return { agreed: true, price, warrantyDays, turns, reason: "ok" };
     }
     turns.push({ seq: seq++, side: "vendor", kind: "counter", price: a, warrantyDays });
+    said = a;
   }
   // Deadlock with overlap remaining: blind mediator picks a random point inside the overlap.
   const price = Math.max(low, Math.min(buyerCeiling, roundStep(low + rnd() * (buyerCeiling - low))));

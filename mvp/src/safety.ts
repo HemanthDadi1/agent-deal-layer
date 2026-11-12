@@ -23,6 +23,6 @@ export function screen(text: string | undefined | null): SafetyVerdict {
   if (INJECTION.some((r) => r.test(t))) flags.push("prompt_injection");
   if (PRESSURE.some((r) => r.test(t))) flags.push("pressure_tactic");
   // eslint-disable-next-line no-control-regex
-  const clean = flags.length ? "" : t.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim();
+  const clean = t.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim();
   return { ok: flags.length === 0, flags, clean };
 }

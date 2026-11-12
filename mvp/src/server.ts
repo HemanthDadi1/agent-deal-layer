@@ -7,6 +7,7 @@ import { SimulatedEscrow, StripeConnectEscrow } from "./escrow.js";
 import { createMcpServer } from "./mcp.js";
 import { MandateViolation } from "./engine.js";
 import { layout, esc, usd, when } from "./web.js";
+import { registerHearth, seedHearth } from "./hearth.js";
 
 type Session = { role: "client" | "vendor" | "admin"; id: string };
 
@@ -22,6 +23,7 @@ export function buildApp(p: Platform, adminKey: string): FastifyInstance {
 
   // ---- rate limit: 120 requests/minute per IP ----
   app.addHook("onRequest", async (req, reply) => {
+    if (req.method === "GET" && req.url.startsWith("/hearth/")) return; // the Hearth shell polls each agent about every 0.65 s
     const k = req.ip; const t = Date.now(); const h = hits.get(k);
     if (!h || t - h.t > 60_000) hits.set(k, { n: 1, t }); else if (++h.n > 120) { reply.code(429).send({ error: "rate limit" }); }
   });
@@ -229,7 +231,7 @@ export function buildApp(p: Platform, adminKey: string): FastifyInstance {
       <h2>Deals waiting for your tap</h2>${pend.length ? `<table><tr><th>Item</th><th>Price</th><th>Expires</th><th></th></tr>${pend.map((q: any) => `<tr><td>${esc(q.title)}</td><td>${usd(q.price)}${q.warranty_days ? ` + ${q.warranty_days}d warranty` : ""}</td><td>${when(q.expires_at)}</td><td>
         <form class="inline" method="post" action="/vendor/quotes/${esc(q.id)}/confirm"><button>Confirm</button></form> <form class="inline" method="post" action="/vendor/quotes/${esc(q.id)}/decline"><button class="alt">Decline</button></form></td></tr>`).join("")}</table>` : `<p class="mut">Nothing waiting.</p>`}
       <h2>Paid deals</h2>${deals.length ? `<table><tr><th>Item</th><th>Price</th><th>Status</th><th></th></tr>${deals.map((d: any) => `<tr><td>${esc(d.title)}</td><td>${usd(d.price)}</td><td><span class="pill">${esc(d.status)}</span></td><td>${d.status === "paid_held" || d.status === "shipped" ? `<form class="inline" method="post" action="/vendor/deals/${esc(d.id)}/delivered"><button>Mark delivered / picked up</button></form>` : ""}</td></tr>`).join("")}</table>` : `<p class="mut">No deals yet.</p>`}
-      <h2>Lead list</h2>${leads.length ? `<table><tr><th>When</th><th>Item</th><th>Buyer wanted</th><th>Budget</th><th>Quote</th><th>Outcome</th><th>Why</th></tr>${leads.map((l: any) => `<tr><td>${when(l.created_at)}</td><td>${esc(l.title)}</td><td>${esc(l.query)}</td><td>${usd(l.budget)}</td><td>${l.price ? usd(l.price) : "–"}</td><td><span class="pill">${esc(l.outcome)}</span></td><td>${esc(l.reason)}</td></tr>`).join("")}</table>` : `<p class="mut">No leads yet.</p>`}
+      <h2>Lead list</h2>${leads.length ? `<table><tr><th>When</th><th>Item</th><th>Buyer wanted</th><th>Quote</th><th>Outcome</th><th>Why</th></tr>${leads.map((l: any) => `<tr><td>${when(l.created_at)}</td><td>${esc(l.title)}</td><td>${esc(l.query)}</td><td>${l.price ? usd(l.price) : "–"}</td><td><span class="pill">${esc(l.outcome)}</span></td><td>${esc(l.reason)}</td></tr>`).join("")}</table>` : `<p class="mut">No leads yet.</p>`}
       <h2>Funnel per product</h2><table><tr><th>Item</th><th>Views</th><th>Quote requests</th><th>Deals</th><th>Revenue</th></tr>${fun.map((f: any) => `<tr><td>${esc(f.title)}</td><td>${f.views}</td><td>${f.quoteRequests}</td><td>${f.deals}</td><td>${usd(f.revenue)}</td></tr>`).join("")}</table>
       ${price.length ? `<h2>Price suggestions</h2>${price.map((x) => `<div class="card">${esc(x.title)}: list ${usd(x.listPrice)}, market median ${usd(x.marketMedian!)}. ${esc(x.reason)} <form class="inline" method="post" action="/vendor/items/${esc(x.itemId)}/accept-price"><button>Set to ${usd(x.suggestedPrice!)}</button></form></div>`).join("")}` : ""}
       <h2>Items (${items.length})</h2><table><tr><th>Item</th><th>List</th><th>Stock</th><th>Status</th></tr>${items.map((i: any) => `<tr><td>${esc(i.title)}</td><td>${usd(i.list_price)}</td><td>${i.stock}</td><td>${esc(i.status)}</td></tr>`).join("")}</table>
@@ -295,9 +297,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     contextKey: process.env.CONTEXT_KEY, baseUrl: process.env.BASE_URL ?? "http://localhost:3000",
     sendWebhook: async (url, payload) => { await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(5000) }); },
   });
-  const adminKey = process.env.ADMIN_KEY ?? "dev-admin-key";
+  // No shared default key: without ADMIN_KEY each run gets its own random one.
+  const adminKey = process.env.ADMIN_KEY ?? randomBytes(18).toString("base64url");
+  if (!process.env.ADMIN_KEY) console.log(`ADMIN_KEY not set; admin key for this run: ${adminKey}`);
   const app = buildApp(p, adminKey);
+  if (process.env.HEARTH === "1") {
+    // The Hearth shell's open connector (src/hearth.ts). Point the shell's Connector at this server.
+    const h = registerHearth(app, p, {
+      pin: process.env.HEARTH_PIN, inrPerUsd: Number(process.env.HEARTH_INR_PER_USD ?? 83),
+      origins: process.env.HEARTH_ORIGINS?.split(",").map((s) => s.trim()).filter(Boolean),
+    });
+    if (process.env.HEARTH_SEED !== "0") seedHearth(h);
+    console.log(`Hearth connector on /hearth/* at ${h.inrPerUsd} INR per USD. Approval PIN for Hearth buyers this run: ${h.pin}`);
+  }
   setInterval(() => p.tick(), 60_000).unref();
-  await app.listen({ port: Number(process.env.PORT ?? 3000), host: "0.0.0.0" });
+  // Local only unless HOST is set (e.g. HOST=0.0.0.0 behind HTTPS when deployed).
+  await app.listen({ port: Number(process.env.PORT ?? 3000), host: process.env.HOST ?? "127.0.0.1" });
   console.log(`Agent Deal Layer on :${process.env.PORT ?? 3000} (escrow: ${p.escrow.name})`);
 }
