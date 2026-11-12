@@ -3,22 +3,26 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "tsx src/server.ts",
+    "hearth": "HEARTH=1 ADL_DB=:memory: tsx src/server.ts",
     "mcp": "tsx src/mcp-stdio.ts",
     "demo": "tsx src/demo.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "*",
-    "fastify": "*",
-    "zod": "*"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "fastify": "^5.12.8",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "*",
-    "tsx": "*",
-    "typescript": "*",
-    "vitest": "*"
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
   }
 }

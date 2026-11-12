@@ -14,7 +14,7 @@ table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(-
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}th{background:#eef1f6}
 input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;width:100%;margin:4px 0 10px}
 button,.btn{font:inherit;background:var(--brand);color:#fff;border:0;border-radius:6px;padding:9px 16px;cursor:pointer;text-decoration:none;display:inline-block}
-button.alt{background:#fff;color:var(--brand);border:1px solid var(--brand)}button.bad{background:var(--bad)}
+button.alt{background:#fff;color:var(--brand);border:1px solid var(--brand)}button.bad{background:var(--bad);color:#fff}
 .pill{display:inline-block;padding:2px 8px;border-radius:99px;background:#e6ecf7;font-size:12px}.ok{color:var(--ok)}.bad{color:var(--bad)}.mut{color:var(--mut)}
 .notice{background:#fff8e6;border:1px solid #f0d58a;border-radius:8px;padding:10px 12px;margin:12px 0}
 form.inline{display:inline}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:640px){.row{grid-template-columns:1fr}}

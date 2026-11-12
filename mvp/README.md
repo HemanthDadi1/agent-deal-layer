@@ -4,12 +4,32 @@ Marketplace where each vendor gets an AI sales agent and buyers bring their own 
 
 ```bash
 npm install
-npm test            # 35 tests, incl. 1,000-run floor/budget simulation and a real MCP client over HTTP
+npm test            # 44 tests, incl. 1,000-run floor/budget simulation, a real MCP client over HTTP and the Hearth routes
 npm run demo        # whole deal loop in the terminal
-npm start           # http://localhost:3000   (ADMIN_KEY=... PORT=... ADL_DB=adl.db BASE_URL=https://...)
+npm start           # http://localhost:3000   (ADMIN_KEY=... PORT=... HOST=... ADL_DB=adl.db BASE_URL=https://...)
+npm run hearth      # the same server plus the Hearth connector and a few seeded sellers (in-memory database)
 ```
 
 Needs Node 22.13+ (uses the built-in `node:sqlite`).
+
+The server listens on `127.0.0.1` only; set `HOST=0.0.0.0` when deploying behind HTTPS. Without `ADMIN_KEY`, each run prints its own random admin key.
+
+## Hearth connector
+
+[Hearth](https://github.com/HemanthDadi1/hearth) is the people-facing shell: a short chat instead of a catalog, agents that haggle, a PIN to approve. `src/hearth.ts` implements its open connector (`/hearth/*`, see Hearth's `CONNECTOR.md`) on this layer:
+
+| Hearth | This layer |
+| --- | --- |
+| Seller listing (asking, private lowest, auto-confirm rule) | An approved vendor with one item; floor = lowest |
+| Buyer intent (want, private most) | A mandate; budget = most. The shared engine negotiates |
+| "Let my agent get it" on a product page | A mandate matched against that one item only |
+| Seller taps **Confirm** | Vendor confirmation |
+| Buyer taps **Approve** with a PIN | `approveQuote`: PIN check, then an escrow hold |
+| Watch, wanted board, invites to outside sellers | Matching re-run for one new item against a waiting mandate |
+
+`npm run hearth` prints the approval PIN for Hearth's buyers. Point Hearth's Connector at `http://127.0.0.1:3000`. Settings: `HEARTH_PIN`, `HEARTH_INR_PER_USD` (83), `HEARTH_ORIGINS` (`http://127.0.0.1:8090,http://localhost:8090`), `HEARTH_SEED=0` to start empty.
+
+Known limits: every Hearth buyer shares one demo account until Hearth has login; rupees are converted to the layer's dollar range ($100 to $2,000, about ₹8,300 to ₹1,66,000); which Hearth id maps to which mandate or item is kept in memory, so `npm run hearth` uses an in-memory database too. Nothing returned to Hearth carries a floor or a budget; `test/hearth.test.ts` checks that.
 
 ## Try it in the browser
 1. `ADMIN_KEY=secret npm start`, open `/admin`, sign in, create an **access code**.
